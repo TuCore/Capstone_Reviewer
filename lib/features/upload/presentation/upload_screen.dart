@@ -13,7 +13,6 @@ class UploadScreen extends ConsumerStatefulWidget {
 
 class _UploadScreenState extends ConsumerState<UploadScreen> {
   final _apiKeyController = TextEditingController();
-  bool _didSync = false;
 
   @override
   void dispose() {
@@ -26,12 +25,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     final state = ref.watch(uploadControllerProvider);
     final controller = ref.read(uploadControllerProvider.notifier);
 
-    // Sync saved settings into text fields once
-    if (!_didSync) {
-      if (state.apiKey.isNotEmpty && _apiKeyController.text.isEmpty) {
-        _apiKeyController.text = state.apiKey;
-      }
-      _didSync = true;
+    // Sync saved settings into text fields (chạy khi load xong file json)
+    if (state.apiKey.isNotEmpty && _apiKeyController.text.isEmpty) {
+      _apiKeyController.text = state.apiKey;
     }
 
     // BẮT BUỘC cả 3 file + API Key
