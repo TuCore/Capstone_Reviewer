@@ -4,15 +4,42 @@ import 'upload_controller.dart';
 import '../../review/presentation/review_screen.dart';
 import '../../../core/services/ai_service.dart';
 
-class UploadScreen extends ConsumerWidget {
+class UploadScreen extends ConsumerStatefulWidget {
   const UploadScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<UploadScreen> createState() => _UploadScreenState();
+}
+
+class _UploadScreenState extends ConsumerState<UploadScreen> {
+  final _apiKeyController = TextEditingController();
+  bool _didSync = false;
+
+  @override
+  void dispose() {
+    _apiKeyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(uploadControllerProvider);
     final controller = ref.read(uploadControllerProvider.notifier);
 
-    final bool canAnalyze = state.excelPath != null && state.pdfPath != null && !state.isAnalyzing;
+    // Sync saved settings into text fields once
+    if (!_didSync) {
+      if (state.apiKey.isNotEmpty && _apiKeyController.text.isEmpty) {
+        _apiKeyController.text = state.apiKey;
+      }
+      _didSync = true;
+    }
+
+    // BẮT BUỘC cả 3 file + API Key
+    final bool canAnalyze = state.excelPath != null &&
+        state.pdfPath != null &&
+        state.proposalPath != null &&
+        state.apiKey.isNotEmpty &&
+        !state.isAnalyzing;
 
     String apiKeyLabel = 'Gemini API Key (Bắt buộc)';
     if (state.provider == AIProvider.chatgpt) apiKeyLabel = 'OpenAI API Key (Bắt buộc)';
@@ -53,6 +80,7 @@ class UploadScreen extends ConsumerWidget {
                 Expanded(
                   flex: 3,
                   child: TextField(
+                    controller: _apiKeyController,
                     decoration: InputDecoration(
                       labelText: apiKeyLabel,
                       border: const OutlineInputBorder(),
@@ -81,6 +109,7 @@ class UploadScreen extends ConsumerWidget {
                   Expanded(
                     child: _FileDropZone(
                       title: 'File Excel (Test Cases)',
+                      subtitle: 'Bắt buộc • .xlsx, .xls',
                       icon: Icons.table_chart,
                       color: Colors.green,
                       filePath: state.excelPath,
@@ -88,15 +117,28 @@ class UploadScreen extends ConsumerWidget {
                       onClear: controller.clearExcel,
                     ),
                   ),
-                  const SizedBox(width: 32),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: _FileDropZone(
-                      title: 'File SRS (Đặc tả dự án - PDF/Word)',
-                      icon: Icons.picture_as_pdf,
+                      title: 'File SRS (Đặc tả dự án)',
+                      subtitle: 'Bắt buộc • .pdf, .docx, .doc',
+                      icon: Icons.description,
                       color: Colors.deepPurple,
                       filePath: state.pdfPath,
                       onSelect: controller.pickPdfFile,
                       onClear: controller.clearPdf,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _FileDropZone(
+                      title: 'Phiếu Đăng Ký Đồ Án',
+                      subtitle: 'Bắt buộc • .pdf, .docx, .doc',
+                      icon: Icons.assignment,
+                      color: Colors.orange,
+                      filePath: state.proposalPath,
+                      onSelect: controller.pickProposalFile,
+                      onClear: controller.clearProposal,
                     ),
                   ),
                 ],
@@ -108,18 +150,21 @@ class UploadScreen extends ConsumerWidget {
               child: ElevatedButton(
                 onPressed: canAnalyze
                     ? () async {
-                        final result = await controller.analyzeFiles();
-                        if (result != null && context.mounted) {
-                          Navigator.of(context).push(
+                        var result = await controller.analyzeFiles();
+                        if (result != null) {
+                          if (!mounted) return;
+                          Navigator.push(
+                            context,
                             MaterialPageRoute(
-                              builder: (_) => ReviewScreen(reviewContent: result),
+                              builder: (context) => ReviewScreen(
+                                reviewContent: result,
+                              ),
                             ),
                           );
                         }
                       }
                     : null,
                 style: ElevatedButton.styleFrom(
-
                   backgroundColor: Theme.of(context).colorScheme.primary,
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: Colors.grey.shade300,
@@ -151,6 +196,7 @@ class UploadScreen extends ConsumerWidget {
 
 class _FileDropZone extends StatelessWidget {
   final String title;
+  final String subtitle;
   final IconData icon;
   final Color color;
   final String? filePath;
@@ -159,6 +205,7 @@ class _FileDropZone extends StatelessWidget {
 
   const _FileDropZone({
     required this.title,
+    required this.subtitle,
     required this.icon,
     required this.color,
     this.filePath,
@@ -231,11 +278,17 @@ class _FileDropZone extends StatelessWidget {
                     Text(
                       title,
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
                     Text(
+                      subtitle,
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
                       'Nhấn để chọn file',
-                      style: TextStyle(color: Colors.grey.shade600),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                     ),
                   ],
                 ),

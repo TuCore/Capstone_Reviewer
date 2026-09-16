@@ -10,6 +10,7 @@ class AIService {
 
   AIService({required this.apiKey, required this.provider});
 
+  /// Legacy method — trả về Markdown thuần (giữ cho backward-compatible)
   Future<String> reviewTestCases({
     required String srsContent,
     required String testCasesContent,
@@ -42,6 +43,149 @@ Phân tích xem có Test Case nào viết sai logic hoặc không cần thiết 
       case AIProvider.claude:
         return _callClaude(prompt);
     }
+  }
+
+  /// New method — trả về Structured JSON cho Dashboard
+  Future<String> reviewTestCasesStructured({
+    required String srsContent,
+    required String testCasesContent,
+    required String proposalContent,
+  }) async {
+    final prompt = _buildStructuredPrompt(srsContent, testCasesContent, proposalContent);
+
+    switch (provider) {
+      case AIProvider.gemini:
+        return _callGemini(prompt);
+      case AIProvider.chatgpt:
+        return _callChatGPT(prompt);
+      case AIProvider.claude:
+        return _callClaude(prompt);
+    }
+  }
+
+  String _buildStructuredPrompt(
+    String srsContent,
+    String testCasesContent,
+    String proposalContent,
+  ) {
+    return '''
+Bạn là một chuyên gia kiểm thử phần mềm (QA/Tester) cấp cao với 15+ năm kinh nghiệm trong ngành, đang đóng vai trò là Giám khảo AI (AI Auditor) để thẩm định chất lượng kiểm thử của một đồ án tốt nghiệp (Capstone Project).
+
+═══════════════════════════════════════════════════
+PHIẾU ĐĂNG KÝ ĐỒ ÁN (Project Registration Form):
+═══════════════════════════════════════════════════
+$proposalContent
+
+═══════════════════════════════════════════════════
+TÀI LIỆU ĐẶC TẢ YÊU CẦU (SRS):
+═══════════════════════════════════════════════════
+$srsContent
+
+═══════════════════════════════════════════════════
+BỘ TEST CASES ĐÃ VIẾT:
+═══════════════════════════════════════════════════
+$testCasesContent
+
+═══════════════════════════════════════════════════
+YÊU CẦU PHÂN TÍCH:
+═══════════════════════════════════════════════════
+
+Hãy thực hiện phân tích TOÀN DIỆN và trả về KẾT QUẢ DUY NHẤT dạng JSON thuần (KHÔNG có markdown code fence, KHÔNG có giải thích thêm bên ngoài JSON).
+
+BỘ TIÊU CHÍ ĐÁNH GIÁ (Rubric):
+1. Độ bao phủ yêu cầu (Coverage - Trọng số 40%): Tỷ lệ % các yêu cầu trong SRS đã có ít nhất một Test Case tương ứng.
+2. Độ sâu kiểm thử (Depth & Rigor - Trọng số 30%): Phân bổ tỷ lệ Happy Path vs Negative Cases vs Edge Cases. Cảnh báo nếu Happy Path > 80%.
+3. Chất lượng mô tả (Specification Quality - Trọng số 20%): Đánh giá độ chi tiết của Preconditions, Test Steps, Test Data, Expected Results.
+4. Tính truy vết (Traceability - Trọng số 10%): Khả năng liên kết chính xác giữa mã SRS (REQ_ID) và mã kiểm thử (TC_ID).
+
+ĐIỂM TỔNG = Coverage_Score * 0.4 + Depth_Score * 0.3 + Quality_Score * 0.2 + Traceability_Score * 0.1
+(Mỗi tiêu chí đều chấm trên thang 10)
+
+XẾP LOẠI:
+- 8.5–10.0: "Xuất sắc"
+- 7.0–8.4: "Khá"
+- 5.0–6.9: "Trung bình"
+- Dưới 5.0: "Cần viết lại"
+
+PHÁT HIỆN ANTI-PATTERN (Bắt buộc):
+- VAGUE_EXPECTATION: Expected Results mơ hồ (ví dụ: "Hệ thống báo lỗi" mà không rõ lỗi gì)
+- BOUNDARY_ABSENCE: Trường dữ liệu số/chuỗi mà không có kiểm thử giá trị biên (min, max, rỗng, âm)
+- SECURITY_GAP: Ô nhập liệu quan trọng chưa kiểm thử SQL Injection, XSS, ký tự đặc biệt
+- DUPLICATE_TEST: Test case trùng lặp hoặc quá giống nhau
+- MISSING_PRECONDITION: Test case thiếu tiền điều kiện rõ ràng
+
+THÔNG TIN PHIẾU ĐĂNG KÝ: Trích xuất tên đề tài, giảng viên hướng dẫn, thành viên nhóm từ Phiếu Đăng Ký. Đối chiếu phạm vi dự án trong Phiếu Đăng Ký với nội dung SRS.
+
+JSON SCHEMA BẮT BUỘC (trả về đúng format này):
+{
+  "projectTitle": "Tên đề tài trích từ Phiếu Đăng Ký",
+  "supervisor": "Tên GVHD trích từ Phiếu Đăng Ký",
+  "teamMembers": "Danh sách thành viên nhóm",
+  "scorecard": {
+    "totalScore": 6.8,
+    "grade": "Khá",
+    "coverageRate": 70.0,
+    "depthScore": 5.5,
+    "qualityScore": 7.0,
+    "traceabilityScore": 6.0,
+    "summary": "Nhận xét tổng quan ngắn gọn về chất lượng bộ test cases...",
+    "strengths": ["Điểm mạnh 1", "Điểm mạnh 2", "Điểm mạnh 3"],
+    "weaknesses": ["Điểm yếu chí mạng 1", "Điểm yếu chí mạng 2", "Điểm yếu chí mạng 3"]
+  },
+  "metrics": {
+    "totalRequirements": 15,
+    "coveredRequirements": 10,
+    "totalTestCases": 42,
+    "happyPathCount": 35,
+    "negativePathCount": 5,
+    "edgeCaseCount": 2,
+    "securityTestCount": 0
+  },
+  "rtm": [
+    {
+      "reqId": "REQ-01",
+      "reqName": "Tên chức năng",
+      "testCount": 5,
+      "status": "PASS",
+      "critique": "Nhận xét chi tiết cho chức năng này..."
+    },
+    {
+      "reqId": "REQ-04",
+      "reqName": "Thanh toán Online",
+      "testCount": 0,
+      "status": "MISSING",
+      "critique": "Chưa có bất kỳ test case nào cho cổng thanh toán."
+    }
+  ],
+  "antiPatterns": [
+    {
+      "type": "VAGUE_EXPECTATION",
+      "testCaseId": "TC_03",
+      "description": "Mô tả chi tiết lỗi anti-pattern...",
+      "severity": "HIGH"
+    }
+  ],
+  "missingSuggestions": [
+    {
+      "reqId": "REQ-04",
+      "testCaseId": "TC_REQ_04_01",
+      "title": "Tiêu đề test case gợi ý",
+      "type": "Negative",
+      "preconditions": "Tiền điều kiện cụ thể...",
+      "testData": "Dữ liệu thử nghiệm mẫu...",
+      "steps": "1. Bước 1...\\n2. Bước 2...\\n3. Bước 3...",
+      "expected": "Kết quả kỳ vọng chi tiết, cụ thể..."
+    }
+  ]
+}
+
+QUAN TRỌNG:
+- CHỈ trả về JSON thuần. KHÔNG bọc trong markdown code fence. KHÔNG có bất kỳ text nào trước hoặc sau JSON.
+- Phải liệt kê TỪNG chức năng/yêu cầu trong SRS vào mảng "rtm", kể cả những chức năng đã có đủ test case.
+- Phải gợi ý ít nhất 3-5 test cases bổ sung cho các REQ bị MISSING hoặc WARNING.
+- Điểm phải hợp lý và phản ánh đúng chất lượng thực tế của bộ test cases.
+- severity của antiPatterns: "HIGH" cho lỗi nghiêm trọng, "MEDIUM" cho lỗi trung bình, "LOW" cho lỗi nhẹ.
+''';
   }
 
   // --- GEMINI LOGIC ---
