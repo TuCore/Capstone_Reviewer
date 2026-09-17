@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+
+import '../../../core/services/excel_export_service.dart';
 import '../../../core/services/pdf_export_service.dart';
+import '../review_bundle.dart';
 
 class ReviewScreen extends StatefulWidget {
-  final String reviewContent;
+  final ReviewBundle bundle;
 
-  const ReviewScreen({super.key, required this.reviewContent});
+  const ReviewScreen({super.key, required this.bundle});
 
   @override
   State<ReviewScreen> createState() => _ReviewScreenState();
@@ -13,41 +16,59 @@ class ReviewScreen extends StatefulWidget {
 
 class _ReviewScreenState extends State<ReviewScreen> {
   bool isExporting = false;
-  String? exportPath;
 
-  Future<void> _exportPdf() async {
-    setState(() {
-      isExporting = true;
-      exportPath = null;
-    });
-
+  Future<void> _exportExcel() async {
+    setState(() => isExporting = true);
     try {
-      final service = PdfExportService();
-      final path = await service.exportReportToPdf(widget.reviewContent);
-      
+      final path = await ExcelExportService().export(
+        stats: widget.bundle.stats,
+        checks: widget.bundle.checks,
+        records: widget.bundle.records,
+        reviewMarkdown: widget.bundle.markdown,
+        crossCheck: widget.bundle.crossCheck,
+        verifiedFindings: widget.bundle.verifiedFindings,
+      );
       if (!mounted) return;
-      setState(() {
-        isExporting = false;
-        exportPath = path;
-      });
-
+      setState(() => isExporting = false);
+      if (path == null) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Xuất PDF thành công tại:\n$path'),
+          content: Text('Đã lưu Excel:\n$path'),
           backgroundColor: Colors.green,
-          duration: const Duration(seconds: 5),
         ),
       );
-    } catch (e, st) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() {
-        isExporting = false;
-      });
-      print('Pdf Export Error: $e');
-      print('Stacktrace: $st');
+      setState(() => isExporting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Lỗi xuất PDF: $e\n$st'),
+          content: Text('Lỗi xuất Excel: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    setState(() => isExporting = true);
+    try {
+      final path =
+          await PdfExportService().exportReportToPdf(widget.bundle.markdown);
+      if (!mounted) return;
+      setState(() => isExporting = false);
+      if (path == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã lưu PDF:\n$path'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => isExporting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi xuất PDF: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -61,20 +82,26 @@ class _ReviewScreenState extends State<ReviewScreen> {
         title: const Text('Kết quả Phản biện (Review)'),
         elevation: 2,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: isExporting
-                ? const Center(child: CircularProgressIndicator())
-                : ElevatedButton.icon(
-                    onPressed: _exportPdf,
-                    icon: const Icon(Icons.picture_as_pdf),
-                    label: const Text('Xuất PDF'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                      foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-          )
+          if (isExporting)
+            const Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            TextButton.icon(
+              onPressed: _exportPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const Text('PDF'),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: ElevatedButton.icon(
+                onPressed: _exportExcel,
+                icon: const Icon(Icons.table_view),
+                label: const Text('Xuất Excel'),
+              ),
+            ),
+          ],
         ],
       ),
       body: Padding(
@@ -82,24 +109,20 @@ class _ReviewScreenState extends State<ReviewScreen> {
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
             boxShadow: [
               BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
-                spreadRadius: 5,
-              )
+                offset: const Offset(0, 4),
+              ),
             ],
           ),
+          padding: const EdgeInsets.all(32.0),
           child: Markdown(
-            data: widget.reviewContent,
+            data: widget.bundle.markdown,
             selectable: true,
-            styleSheet: MarkdownStyleSheet(
-              h1: const TextStyle(color: Colors.blueAccent, fontSize: 28, fontWeight: FontWeight.bold),
-              h2: const TextStyle(color: Colors.blue, fontSize: 22, fontWeight: FontWeight.bold),
-              p: const TextStyle(fontSize: 16, height: 1.5),
-              listBullet: const TextStyle(fontSize: 16),
-            ),
           ),
         ),
       ),
