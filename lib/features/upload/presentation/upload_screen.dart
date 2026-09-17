@@ -116,14 +116,6 @@ class UploadScreen extends ConsumerWidget {
                       color: Colors.orange.shade50,
                       child: Text(state.statusMessage!),
                     ),
-                  if (state.skippedSheets.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        'Sheet bỏ qua: ${state.skippedSheets.join(', ')}',
-                        style: TextStyle(color: Colors.orange.shade900),
-                      ),
-                    ),
                   if (state.unknownModules.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),

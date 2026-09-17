@@ -27,8 +27,17 @@ class ExtractionResult {
 
   String preamble() {
     final lines = <String>[];
-    if (skippedSheets.isNotEmpty) {
-      lines.add('Sheet bỏ qua: ${skippedSheets.join(', ')}');
+    final abnormal = skippedSheets.where((s) {
+      final lower = s.toLowerCase();
+      return !lower.startsWith('cover') &&
+          !lower.startsWith('test cases') &&
+          !lower.startsWith('test statistics') &&
+          !lower.startsWith('statistics') &&
+          !lower.startsWith('functions') &&
+          !lower.startsWith('history');
+    }).toList();
+    if (abnormal.isNotEmpty) {
+      lines.add('Sheet bỏ qua: ${abnormal.join(', ')}');
     }
     if (unknownModules.isNotEmpty) {
       lines.add('UNKNOWN: ${unknownModules.join('; ')}');
