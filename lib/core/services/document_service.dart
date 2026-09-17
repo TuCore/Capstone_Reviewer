@@ -1,41 +1,73 @@
 import 'dart:io';
+
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
-import 'package:docx_to_text/docx_to_text.dart';
+
+import '../extraction/extraction_result.dart';
+import '../extraction/file_gate.dart';
+import '../extraction/heading_docx.dart';
 
 class DocumentService {
-  /// Extracts text from PDF or DOCX using isolates
-  Future<String> extractText(String filePath) async {
-    return await compute(_extractContent, filePath);
-  }
-
-  static String _extractContent(String filePath) {
-    try {
-      if (filePath.toLowerCase().endsWith('.pdf')) {
-        return _extractPdfContent(filePath);
-      } else if (filePath.toLowerCase().endsWith('.docx') || filePath.toLowerCase().endsWith('.doc')) {
-        return _extractDocxContent(filePath);
-      } else {
-        throw Exception('Định dạng file không được hỗ trợ. Vui lòng chọn .pdf hoặc .docx');
-      }
-    } catch (e) {
-      throw Exception('Lỗi khi đọc file tài liệu: $e');
+  Future<ExtractionResult> extract(String filePath) async {
+    final inspection = FileGate.inspect(filePath);
+    if (inspection.rejected) {
+      throw FileRejectedException(
+        inspection.rejectReason ?? 'File không hợp lệ.',
+      );
     }
+    return compute(extractDocumentSync, filePath);
   }
+}
 
-  static String _extractPdfContent(String filePath) {
-    final List<int> bytes = File(filePath).readAsBytesSync();
-    final PdfDocument document = PdfDocument(inputBytes: bytes);
-    
-    String text = PdfTextExtractor(document).extractText();
+ExtractionResult extractDocumentSync(String filePath) {
+  final inspection = FileGate.inspect(filePath);
+  if (inspection.rejected) {
+    throw FileRejectedException(
+      inspection.rejectReason ?? 'File không hợp lệ.',
+    );
+  }
+  try {
+    switch (inspection.kind) {
+      case DetectedKind.pdf:
+        return _extractPdf(filePath, inspection.sizeBytes);
+      case DetectedKind.docx:
+        return _extractDocx(filePath, inspection.sizeBytes);
+      default:
+        throw FileRejectedException(
+          'Định dạng file không được hỗ trợ. Vui lòng chọn .pdf hoặc .docx',
+        );
+    }
+  } on FileRejectedException {
+    rethrow;
+  } catch (e) {
+    throw FileRejectedException('Lỗi khi đọc file tài liệu: $e');
+  }
+}
+
+ExtractionResult _extractPdf(String filePath, int sizeBytes) {
+  final bytes = File(filePath).readAsBytesSync();
+  final document = PdfDocument(inputBytes: bytes);
+  try {
+    final text = PdfTextExtractor(document).extractText();
+    return extractPlainDocument(text, sizeBytes: sizeBytes);
+  } finally {
     document.dispose();
-    
-    return text;
   }
+}
 
-  static String _extractDocxContent(String filePath) {
-    final bytes = File(filePath).readAsBytesSync();
-    final text = docxToText(bytes);
-    return text;
+ExtractionResult _extractDocx(String filePath, int sizeBytes) {
+  final bytes = File(filePath).readAsBytesSync();
+  Archive archive;
+  try {
+    archive = ZipDecoder().decodeBytes(bytes);
+  } catch (_) {
+    throw FileRejectedException('File đội lốt .docx (không giải nén được).');
   }
+  if (!looksLikeDocx(archive)) {
+    throw FileRejectedException(
+      'File đội lốt .docx (không có word/document.xml).',
+    );
+  }
+  return extractDocxArchive(archive, sizeBytes: sizeBytes);
 }
