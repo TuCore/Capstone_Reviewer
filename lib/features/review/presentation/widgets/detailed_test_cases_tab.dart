@@ -16,6 +16,7 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
   String? _selectedModule;
   TestCaseIssueSeverity? _selectedSeverity;
   String? _selectedStatus;
+  String? _selectedIssueCode;
   bool _onlyWithIssues = false;
   String _sortBy = 'severity'; // 'severity', 'id', 'module', 'status'
 
@@ -51,6 +52,12 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
         .toList()
       ..sort();
 
+    // Filter issue codes
+    final issueCodes = allReviews
+        .expand((r) => r.issues.map((i) => i.code))
+        .toSet()
+        .toList()
+      ..sort();
     // Counts for stat bar
     final totalCount = allReviews.length;
     final issuesCount = allReviews.where((r) => r.hasIssues).length;
@@ -76,6 +83,10 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
       }
 
       if (_selectedStatus != null && rec.status.trim() != _selectedStatus) {
+      }
+
+      if (_selectedIssueCode != null &&
+          !rev.issues.any((i) => i.code == _selectedIssueCode)) {
         return false;
       }
 
@@ -119,51 +130,54 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           color: Colors.grey.shade50,
-          child: Row(
-            children: [
-              _StatChip(
-                label: 'Tổng số test cases',
-                value: '$totalCount',
-                color: Colors.blueGrey,
-              ),
-              const SizedBox(width: 12),
-              _StatChip(
-                label: 'Cần sửa đổi / xem lại',
-                value: '$issuesCount',
-                color: issuesCount > 0 ? Colors.red.shade700 : Colors.green,
-              ),
-              const SizedBox(width: 12),
-              _StatChip(
-                label: 'Không phát hiện lỗi',
-                value: '$cleanCount',
-                color: Colors.green.shade700,
-              ),
-              if (criticalCount > 0) ...[
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _StatChip(
+                  label: 'Tổng số test cases',
+                  value: '$totalCount',
+                  color: Colors.blueGrey,
+                ),
                 const SizedBox(width: 12),
                 _StatChip(
-                  label: 'Lỗi nghiêm trọng',
-                  value: '$criticalCount',
-                  color: Colors.red.shade800,
+                  label: 'Cần sửa đổi / xem lại',
+                  value: '$issuesCount',
+                  color: issuesCount > 0 ? Colors.red.shade700 : Colors.green,
                 ),
-              ],
-              if (highCount > 0) ...[
                 const SizedBox(width: 12),
                 _StatChip(
-                  label: 'Mức cao (High)',
-                  value: '$highCount',
-                  color: Colors.orange.shade800,
+                  label: 'Không phát hiện lỗi',
+                  value: '$cleanCount',
+                  color: Colors.green.shade700,
+                ),
+                if (criticalCount > 0) ...[
+                  const SizedBox(width: 12),
+                  _StatChip(
+                    label: 'Lỗi nghiêm trọng',
+                    value: '$criticalCount',
+                    color: Colors.red.shade800,
+                  ),
+                ],
+                if (highCount > 0) ...[
+                  const SizedBox(width: 12),
+                  _StatChip(
+                    label: 'Mức cao (High)',
+                    value: '$highCount',
+                    color: Colors.orange.shade800,
+                  ),
+                ],
+                const SizedBox(width: 24),
+                Text(
+                  'Hiển thị: ${filtered.length}/$totalCount ca',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
-              const Spacer(),
-              Text(
-                'Hiển thị: ${filtered.length}/$totalCount ca',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
 
@@ -271,6 +285,26 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
                 const SizedBox(width: 12),
               ],
 
+              // Issue code filter
+              if (issueCodes.isNotEmpty) ...[
+                DropdownButton<String?>(
+                  value: _selectedIssueCode,
+                  hint: const Text('Mã lỗi (Issue Code)'),
+                  underline: const SizedBox(),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('Tất cả mã lỗi'),
+                    ),
+                    ...issueCodes.map((c) => DropdownMenuItem(
+                          value: c,
+                          child: Text('Mã: $c'),
+                        )),
+                  ],
+                  onChanged: (val) => setState(() => _selectedIssueCode = val),
+                ),
+                const SizedBox(width: 12),
+              ],
               // Filter only with issues toggle
               FilterChip(
                 label: const Text('Chỉ ca có lỗi'),

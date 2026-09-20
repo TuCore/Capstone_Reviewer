@@ -150,19 +150,19 @@ class TestCaseDetailDialog extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade50,
+                          color: Colors.blueGrey.shade50,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.green.shade200),
+                          border: Border.all(color: Colors.blueGrey.shade200),
                         ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            Icon(Icons.verified, color: Colors.green),
-                            SizedBox(width: 12),
+                            Icon(Icons.info_outline, color: Colors.blueGrey.shade700),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                'Không phát hiện lỗi theo rule deterministic (trường đầy đủ, đúng cú pháp và quy chuẩn).',
+                                'Không phát hiện vấn đề theo các rule deterministic đã chạy; không kết luận testcase đúng.',
                                 style: TextStyle(
-                                  color: Color(0xFF166534),
+                                  color: Colors.blueGrey.shade900,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),

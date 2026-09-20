@@ -1,5 +1,6 @@
 import 'package:capstone_reviewer/core/extraction/test_case_schema.dart';
 import 'package:capstone_reviewer/core/services/cross_check_engine.dart';
+import 'package:capstone_reviewer/core/services/hard_checks.dart';
 import 'package:capstone_reviewer/core/services/test_case_review_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -222,6 +223,85 @@ void main() {
           isTrue,
         );
       }
+    });
+
+    test('status normalization canonicalizes skipped, skip, blocked, untested to Untested', () {
+      expect(TestCaseReviewEngine.normalizeStatus('skipped'), equals('Untested'));
+      expect(TestCaseReviewEngine.normalizeStatus('skip'), equals('Untested'));
+      expect(TestCaseReviewEngine.normalizeStatus('Blocked'), equals('Untested'));
+      expect(TestCaseReviewEngine.normalizeStatus('Pending'), equals('Untested'));
+      expect(TestCaseReviewEngine.normalizeStatus('Untested'), equals('Untested'));
+      expect(TestCaseReviewEngine.normalizeStatus('pass'), equals('PASSED'));
+      expect(TestCaseReviewEngine.normalizeStatus('Passed'), equals('PASSED'));
+      expect(TestCaseReviewEngine.normalizeStatus('fail'), equals('FAILED'));
+      expect(TestCaseReviewEngine.normalizeStatus('Failed'), equals('FAILED'));
+      expect(TestCaseReviewEngine.normalizeStatus('not run'), equals('Not Run'));
+      expect(TestCaseReviewEngine.normalizeStatus('n/a'), equals('N/A'));
+
+      expect(TestCaseReviewEngine.isKnownStatus('PASSED'), isTrue);
+      expect(TestCaseReviewEngine.isKnownStatus('FAILED'), isTrue);
+      expect(TestCaseReviewEngine.isKnownStatus('Not Run'), isTrue);
+      expect(TestCaseReviewEngine.isKnownStatus('Untested'), isTrue);
+      expect(TestCaseReviewEngine.isKnownStatus('N/A'), isTrue);
+      expect(TestCaseReviewEngine.isKnownStatus('RandomValue'), isFalse);
+    });
+
+    test('case-insensitive failed status check requires bug note', () {
+      const recordUpper = TestCaseRecord(
+        sheet: 'M01',
+        id: 'TC_FAIL_01',
+        description: 'Đăng nhập',
+        steps: '1. Nhập sai',
+        expected: 'Báo lỗi tài khoản không tồn tại',
+        status: 'FAILED',
+        testDate: '2026-09-18',
+      );
+
+      final reviewUpper = TestCaseReviewEngine.reviewRecord(recordUpper);
+      expect(reviewUpper.issues.any((i) => i.code == 'failed-missing-bug'), isTrue);
+
+      const recordWithBug = TestCaseRecord(
+        sheet: 'M01',
+        id: 'TC_FAIL_02',
+        description: 'Đăng nhập',
+        steps: '1. Nhập sai',
+        expected: 'Báo lỗi tài khoản không tồn tại',
+        status: 'FAILED',
+        bug: 'BUG-101: Server trả về mã 500 thay vì 400',
+        testDate: '2026-09-18',
+      );
+      final reviewWithBug = TestCaseReviewEngine.reviewRecord(recordWithBug);
+      expect(reviewWithBug.issues.any((i) => i.code == 'failed-missing-bug'), isFalse);
+    });
+
+    test('attaches hard check findings for naming, empty, and wording', () {
+      const record = TestCaseRecord(
+        sheet: 'M01',
+        id: 'tc01', // Lowercase
+        description: 'Mô tả hợp lệ cho chức năng đăng nhập',
+        steps: '1. Bước 1\n2. Bước 2',
+        expected: 'Kết quả kỳ vọng chi tiết hiển thị đầy đủ thông tin trên màn hình chính',
+        status: 'Passed',
+        testDate: '2026-09-18',
+      );
+
+      final hardChecks = [
+        const HardCheckFinding(
+          code: 'naming',
+          message: 'Mã test case không tuân thủ định dạng TC_XXX: tc01',
+        ),
+        const HardCheckFinding(
+          code: 'wording',
+          message: 'Mô tả chứa placeholder hoặc copy-paste',
+        ),
+      ];
+
+      final review = TestCaseReviewEngine.reviewRecord(
+        record,
+        attachedHardChecks: hardChecks,
+      );
+      expect(review.issues.any((i) => i.code == 'naming-inconsistent'), isTrue);
+      expect(review.issues.any((i) => i.code == 'hard-check-wording'), isTrue);
     });
   });
 }

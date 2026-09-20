@@ -96,27 +96,26 @@ class _ReviewScreenState extends State<ReviewScreen> {
           title: const Text('Báo cáo Phản biện Đồ án Capstone'),
           elevation: 1,
           actions: [
-            if (isExporting)
-              const Padding(
-                padding: EdgeInsets.only(right: 16),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else ...[
-              TextButton.icon(
-                onPressed: _exportPdf,
-                icon: const Icon(Icons.picture_as_pdf_outlined),
-                label: const Text('Xuất PDF'),
+            TextButton.icon(
+              onPressed: isExporting ? null : _exportPdf,
+              icon: isExporting
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.picture_as_pdf_outlined),
+              label: const Text('Xuất PDF'),
+            ),
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: ElevatedButton.icon(
+                onPressed: isExporting ? null : _exportExcel,
+                icon: const Icon(Icons.table_view),
+                label: const Text('Xuất Excel'),
               ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: ElevatedButton.icon(
-                  onPressed: _exportExcel,
-                  icon: const Icon(Icons.table_view),
-                  label: const Text('Xuất Excel'),
-                ),
-              ),
-            ],
+            ),
           ],
           bottom: TabBar(
             isScrollable: true,

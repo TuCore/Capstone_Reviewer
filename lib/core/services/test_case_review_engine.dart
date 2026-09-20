@@ -1,6 +1,7 @@
 import '../extraction/test_case_schema.dart';
 import 'cross_check_engine.dart';
 import 'hard_checks.dart';
+import 'hard_checks.dart' as hc;
 
 enum TestCaseIssueSeverity {
   critical,
@@ -83,6 +84,9 @@ class TestCaseReview {
 }
 
 class TestCaseReviewEngine {
+  static String normalizeStatus(String raw) => hc.normalizeStatus(raw);
+  static bool isKnownStatus(String raw) => hc.isKnownStatus(raw);
+
   /// Evaluates every record deterministically, preserving exact 1-to-1 mapping and order.
   static List<TestCaseReview> reviewAll({
     required List<TestCaseRecord> records,
@@ -280,6 +284,30 @@ class TestCaseReviewEngine {
             correction: 'Chuẩn hóa thống nhất tên gọi và thuật ngữ giữa các tài liệu',
           ));
           break;
+        case 'empty':
+          if (!issues.any((i) => i.code == 'empty-procedure' || i.code == 'missing-steps' || i.code == 'missing-expected')) {
+            issues.add(TestCaseIssue(
+              code: 'hard-check-empty',
+              field: ReviewedField.record,
+              severity: TestCaseIssueSeverity.critical,
+              message: hc.message,
+              evidence: '${record.sheet}:${record.id}',
+              correction: 'Bổ sung đầy đủ các bước thực hiện và kết quả mong đợi theo quy chuẩn',
+            ));
+          }
+          break;
+        case 'wording':
+          if (!issues.any((i) => i.code == 'vague-expected' || i.code == 'mixed-expected' || i.code == 'insufficient-evidence')) {
+            issues.add(TestCaseIssue(
+              code: 'hard-check-wording',
+              field: ReviewedField.expected,
+              severity: TestCaseIssueSeverity.medium,
+              message: hc.message,
+              evidence: record.expected,
+              correction: 'Chuẩn hóa diễn đạt kết quả mong đợi rõ ràng, đo lường được',
+            ));
+          }
+          break;
       }
     }
 
@@ -313,7 +341,7 @@ class TestCaseReviewEngine {
       final normalizedSt = normalizeStatus(statusTrimmed);
 
       // Failed test case without defect reference
-      if (normalizedSt == 'failed' || statusTrimmed.toLowerCase().contains('fail')) {
+      if (normalizedSt == 'FAILED' || statusTrimmed.toLowerCase().contains('fail')) {
         if (record.bug.trim().isEmpty && record.note.trim().isEmpty) {
           issues.add(TestCaseIssue(
             code: 'failed-missing-bug',
@@ -327,21 +355,20 @@ class TestCaseReviewEngine {
       }
 
       // Unknown or non-canonical execution status
-      const standardStatuses = {'PASSED', 'FAILED', 'Not Run', 'Untested', 'N/A'};
-      if (!standardStatuses.contains(normalizedSt)) {
+      if (!isKnownStatus(statusTrimmed)) {
         issues.add(TestCaseIssue(
           code: 'unknown-status',
           field: ReviewedField.status,
           severity: TestCaseIssueSeverity.low,
-          message: 'Trạng thái kiểm thử không theo chuẩn quy ước (Passed/Failed/Untested/Blocked/Skipped): "$statusTrimmed"',
+          message: 'Trạng thái kiểm thử không theo chuẩn quy ước (Passed/Failed/Untested/Blocked/Skipped/N/A): "$statusTrimmed"',
           evidence: statusTrimmed,
           correction: 'Chuẩn hóa giá trị trạng thái về Passed, Failed, Untested, Blocked hoặc Skipped',
         ));
       }
 
       // Executed test case missing execution date
-      final isExecuted = normalizedSt == 'passed' ||
-          normalizedSt == 'failed' ||
+      final isExecuted = normalizedSt == 'PASSED' ||
+          normalizedSt == 'FAILED' ||
           statusTrimmed.toLowerCase().contains('pass') ||
           statusTrimmed.toLowerCase().contains('fail');
       if (isExecuted && record.testDate.trim().isEmpty) {

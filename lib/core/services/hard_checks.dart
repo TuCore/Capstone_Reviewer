@@ -128,10 +128,19 @@ String normalizeStatus(String raw) {
     return 'FAILED';
   }
   if (folded == 'not run' || folded == 'notrun') return 'Not Run';
-  if (folded == 'untested' || folded == 'pending' || folded == 'blocked') {
+  if (folded == 'untested' ||
+      folded == 'pending' ||
+      folded == 'blocked' ||
+      folded == 'skipped' ||
+      folded == 'skip') {
     return 'Untested';
   }
   if (folded == 'n a' || folded == 'na') return 'N/A';
   if (raw.trim().isEmpty) return 'Untested';
   return raw.trim();
+}
+
+bool isKnownStatus(String raw) {
+  final norm = normalizeStatus(raw);
+  return const {'PASSED', 'FAILED', 'Not Run', 'Untested', 'N/A'}.contains(norm);
 }

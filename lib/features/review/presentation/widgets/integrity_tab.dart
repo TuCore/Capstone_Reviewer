@@ -38,18 +38,44 @@ class IntegrityTab extends StatelessWidget {
                     children: [
                       const Icon(Icons.copy, color: Color(0xFFDC2626)),
                       const SizedBox(width: 8),
-                      Text(
-                        'TRÙNG LẶP TEST CASE ID & MÂU THUẪN TRẠNG THÁI (${duplicates.length})',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
+                        Text(
+                          crossCheck != null
+                              ? 'TRÙNG LẶP TEST CASE ID & MÂU THUẪN TRẠNG THÁI (${duplicates.length})'
+                              : 'TRÙNG LẶP TEST CASE ID & MÂU THUẪN TRẠNG THÁI (Chưa khả dụng)',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                   const SizedBox(height: 16),
-                  if (duplicates.isEmpty)
+                  if (crossCheck == null)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blueGrey.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blueGrey.shade200),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.blueGrey),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Đối chiếu chéo chưa khả dụng: Chưa thể kiểm tra trùng lặp ID và mâu thuẫn trạng thái giữa các sheet.',
+                              style: TextStyle(
+                                color: Color(0xFF374151),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (duplicates.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(

@@ -18,18 +18,47 @@ class OverviewTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasComparison = crossCheck?.metricsComparison != null;
     final comparison = crossCheck?.metricsComparison;
     final actualTotal = comparison?.actualTotal ?? totalRecordsCount;
-    final actualPassed = comparison?.actualPassed ?? 0;
-    final actualFailed = comparison?.actualFailed ?? 0;
-    final actualOther =
-        (actualTotal - actualPassed - actualFailed).clamp(0, actualTotal);
+    final actualPassed = comparison?.actualPassed ?? stats.passed;
+    final actualFailed = comparison?.actualFailed ?? stats.failed;
+    final actualOther = comparison != null
+        ? (actualTotal - actualPassed - actualFailed).clamp(0, actualTotal)
+        : stats.untested;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (crossCheck == null) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blueGrey.shade200),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blueGrey),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Đối chiếu chéo 3 nguồn chưa khả dụng. Các chỉ số hiển thị dựa trên dữ liệu trích xuất từ Excel và SRS.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF374151),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
           // Row 1: Coverage Gauge + Core KPI Cards
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,7 +116,7 @@ class OverviewTab extends StatelessWidget {
                             color: const Color(0xFF2563EB),
                             subtitle: comparison != null
                                 ? 'Khai báo: ${comparison.excelDeclaredTotal} ca'
-                                : null,
+                                : 'Đối chiếu 3 nguồn: Chưa khả dụng',
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -97,9 +126,11 @@ class OverviewTab extends StatelessWidget {
                             value: '$actualPassed',
                             icon: Icons.check_circle_outline,
                             color: const Color(0xFF16A34A),
-                            subtitle: actualTotal > 0
-                                ? '${(actualPassed / actualTotal * 100).toStringAsFixed(1)}% tổng ca'
-                                : null,
+                            subtitle: comparison != null
+                                ? (actualTotal > 0
+                                    ? '${(actualPassed / actualTotal * 100).toStringAsFixed(1)}% tổng ca'
+                                    : null)
+                                : 'Trích xuất từ Excel: $actualPassed ca',
                           ),
                         ),
                       ],
@@ -118,7 +149,11 @@ class OverviewTab extends StatelessWidget {
                             subtitle: comparison != null &&
                                     comparison.concealedFails > 0
                                 ? '🚨 Lệch: Báo cáo ghi nhận 0 Fail!'
-                                : 'Số ca thực thi thất bại',
+                                : (hasComparison
+                                    ? 'Số ca thực thi thất bại'
+                                    : (actualFailed > 0
+                                        ? 'Số ca thất bại trong Excel'
+                                        : '0 ca thất bại trong Excel')),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -128,7 +163,9 @@ class OverviewTab extends StatelessWidget {
                             value: '$actualOther',
                             icon: Icons.hourglass_empty_outlined,
                             color: const Color(0xFFD97706),
-                            subtitle: 'Chưa thực hiện hoặc N/A',
+                            subtitle: comparison != null
+                                ? 'Chưa thực hiện hoặc N/A'
+                                : 'Chưa thực hiện / N/A từ Excel',
                           ),
                         ),
                       ],
