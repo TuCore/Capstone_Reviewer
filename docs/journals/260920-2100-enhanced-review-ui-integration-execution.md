@@ -51,3 +51,24 @@ Address teacher feedback:
 - `flutter test`: 63/63 tests passing (unit tests, extraction goldens, export tests, widget tests).
 - `flutter build windows`: Release build successful (`build\windows\x64\runner\Release\capstone_reviewer.exe`).
 - Subagent code review: 100% PASS on deterministic engine preservation, layout constraints, clean cutover, 1-to-1 invariant, and 3-document contract.
+
+## Advisory Blockers Resolved
+
+1. **Status Canonicalization & Verification:**
+   - Standardized `normalizeStatus()` in `hard_checks.dart` to map `skipped`/`skip`/`untested`/`pending`/`blocked` to `'Untested'`, while keeping `'PASSED'`, `'FAILED'`, `'Not Run'`, `'N/A'`.
+   - Added `isKnownStatus()` and exposed static forwarding on `TestCaseReviewEngine`.
+   - Normalized case-insensitivity on `'FAILED'` / `'Failed'` check for bug note requirement.
+
+2. **Hard-Check Complete Attachment:**
+   - Extended `TestCaseReviewEngine` to attach all 5 hard-check finding codes: `sheet-type` (`unit-test-type`), `duplicate` (`exact-duplicate`), `naming` (`naming-inconsistent`), `empty` (`hard-check-empty`), and `wording` (`hard-check-wording`).
+
+3. **UI Null-Semantics & Bounded Claims:**
+   - Replaced green verified badge in `TestCaseDetailDialog` with neutral icon and bounded disclaimer: `"Không phát hiện vấn đề theo các rule deterministic đã chạy; không kết luận testcase đúng."`
+   - In `OverviewTab` and `IntegrityTab`, added honest unavailable notices when `crossCheck == null` instead of falsely reporting 0 fails or clean scan. Fallback to `stats` data for Excel counts.
+   - Added issue code filter (`_selectedIssueCode`) and horizontal scroll bar in `DetailedTestCasesTab`.
+   - Kept export buttons visible and disabled with progress indicator in `ReviewScreen` during export.
+
+4. **Automated Verification:**
+   - All 67 automated tests passed (`flutter test`).
+   - `flutter analyze`: 0 issues.
+   - `flutter build windows`: binary built successfully at `build\windows\x64\runner\Release\capstone_reviewer.exe`.
