@@ -83,6 +83,7 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
       }
 
       if (_selectedStatus != null && rec.status.trim() != _selectedStatus) {
+        return false;
       }
 
       if (_selectedIssueCode != null &&
@@ -133,6 +134,7 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 _StatChip(
                   label: 'Tổng số test cases',
