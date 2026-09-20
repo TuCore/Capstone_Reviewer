@@ -15,6 +15,7 @@ import '../../../core/services/quote_guard.dart';
 import '../../../core/services/registration_pii.dart';
 import '../../review/review_bundle.dart';
 import '../../../core/services/cross_check_engine.dart';
+import '../../../core/services/test_case_review_engine.dart';
 
 class UploadState {
   UploadState({
@@ -48,12 +49,25 @@ class UploadState {
   final int runId;
 
   bool get canAnalyze =>
-      excelPath != null &&
+      registrationPath != null &&
       srsPath != null &&
+      excelPath != null &&
       apiKey.isNotEmpty &&
       !isAnalyzing &&
       ApiKeyFormat.errorFor(provider, apiKey) == null;
 
+  List<String> get missingInputs {
+    final list = <String>[];
+    if (registrationPath == null) list.add('Phiếu đăng ký');
+    if (srsPath == null) list.add('SRS');
+    if (excelPath == null) list.add('Excel Test Cases');
+    if (apiKey.isEmpty) {
+      list.add('API Key');
+    } else if (ApiKeyFormat.errorFor(provider, apiKey) != null) {
+      list.add('API Key hợp lệ');
+    }
+    return list;
+  }
   UploadState copyWith({
     String? excelPath,
     String? srsPath,
@@ -312,9 +326,12 @@ class UploadController extends Notifier<UploadState> {
 
   Future<ReviewBundle?> analyzeFiles() async {
     if (state.isAnalyzing) return null;
-    if (state.excelPath == null || state.srsPath == null) {
+    if (state.registrationPath == null ||
+        state.srsPath == null ||
+        state.excelPath == null) {
       state = _base().copyWith(
-        error: 'Cần file SRS và file test case. Phiếu đăng ký không bắt buộc.',
+        error:
+            'Cần đủ 3 tài liệu: Phiếu đăng ký đề tài, SRS và file test case Excel.',
       );
       return null;
     }
@@ -328,20 +345,26 @@ class UploadController extends Notifier<UploadState> {
       return null;
     }
 
-    final excelGate = FileGate.inspect(state.excelPath!);
+    final regGate = FileGate.inspect(state.registrationPath!);
     final srsGate = FileGate.inspect(state.srsPath!);
-    if (excelGate.rejected) {
-      state = _base().copyWith(error: excelGate.rejectReason);
+    final excelGate = FileGate.inspect(state.excelPath!);
+    if (regGate.rejected) {
+      state = _base().copyWith(error: regGate.rejectReason);
       return null;
     }
     if (srsGate.rejected) {
       state = _base().copyWith(error: srsGate.rejectReason);
       return null;
     }
+    if (excelGate.rejected) {
+      state = _base().copyWith(error: excelGate.rejectReason);
+      return null;
+    }
 
     final runId = ++_generation;
-    final chunked = excelGate.band == FileSizeBand.chunked ||
-        srsGate.band == FileSizeBand.chunked;
+    final chunked = regGate.band == FileSizeBand.chunked ||
+        srsGate.band == FileSizeBand.chunked ||
+        excelGate.band == FileSizeBand.chunked;
     state = UploadState(
       excelPath: state.excelPath,
       srsPath: state.srsPath,
@@ -356,19 +379,16 @@ class UploadController extends Notifier<UploadState> {
     );
 
     try {
+      final regDoc = await _docService.extract(state.registrationPath!);
+      if (_isStale(runId)) return null;
+      final registrationBlock =
+          extractRegistrationContext(regDoc.text).toPromptBlock();
+
       final excelResult =
           await _excelService.extractTestCases(state.excelPath!);
       if (_isStale(runId)) return null;
       final docResult = await _docService.extract(state.srsPath!);
       if (_isStale(runId)) return null;
-
-      String? registrationBlock;
-      if (state.registrationPath != null) {
-        final reg = await _docService.extract(state.registrationPath!);
-        if (_isStale(runId)) return null;
-        registrationBlock =
-            extractRegistrationContext(reg.text).toPromptBlock();
-      }
 
       final unknown = [
         ...excelResult.unknownModules,
@@ -390,6 +410,11 @@ class UploadController extends Notifier<UploadState> {
         excelText: excelResult.text,
         registrationText: registrationBlock,
         rawSheets: excelResult.rawSheets,
+      );
+      final caseReviews = TestCaseReviewEngine.reviewAll(
+        records: excelResult.records,
+        hardChecks: checks,
+        duplicateFindings: crossCheck.duplicateIds,
       );
       state = UploadState(
         excelPath: state.excelPath,
@@ -437,7 +462,7 @@ class UploadController extends Notifier<UploadState> {
           rawSources: [
             docResult.text,
             excelResult.text,
-            registrationBlock ?? '',
+            registrationBlock,
           ],
         );
       } catch (_) {
@@ -447,7 +472,7 @@ class UploadController extends Notifier<UploadState> {
       final guarded = stripHallucinatedQuotes(review, [
         docResult.text,
         excelResult.text,
-        registrationBlock ?? '',
+        registrationBlock,
       ]);
 
       final buf = StringBuffer();
@@ -495,6 +520,7 @@ class UploadController extends Notifier<UploadState> {
         stats: stats,
         checks: checks,
         records: excelResult.records,
+        caseReviews: caseReviews,
         crossCheck: crossCheck,
         verifiedFindings: verifiedFindings,
       );

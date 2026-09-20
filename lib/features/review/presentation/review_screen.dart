@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../../core/services/excel_export_service.dart';
 import '../../../core/services/pdf_export_service.dart';
 import '../review_bundle.dart';
+import 'widgets/detailed_test_cases_tab.dart';
+import 'widgets/full_report_tab.dart';
+import 'widgets/integrity_tab.dart';
+import 'widgets/overview_tab.dart';
+import 'widgets/reconciliation_tab.dart';
+import 'widgets/verified_findings_tab.dart';
 
 class ReviewScreen extends StatefulWidget {
   final ReviewBundle bundle;
@@ -25,6 +30,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
         checks: widget.bundle.checks,
         records: widget.bundle.records,
         reviewMarkdown: widget.bundle.markdown,
+        caseReviews: widget.bundle.caseReviews,
         crossCheck: widget.bundle.crossCheck,
         verifiedFindings: widget.bundle.verifiedFindings,
       );
@@ -77,53 +83,166 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Kết quả Phản biện (Review)'),
-        elevation: 2,
-        actions: [
-          if (isExporting)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else ...[
-            TextButton.icon(
-              onPressed: _exportPdf,
-              icon: const Icon(Icons.picture_as_pdf_outlined),
-              label: const Text('PDF'),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: ElevatedButton.icon(
-                onPressed: _exportExcel,
-                icon: const Icon(Icons.table_view),
-                label: const Text('Xuất Excel'),
+    final bundle = widget.bundle;
+    final issuesCount =
+        bundle.caseReviews.where((r) => r.hasIssues).length;
+    final verifiedCount = bundle.verifiedFindings.length;
+
+    return DefaultTabController(
+      length: 6,
+      initialIndex: 0, // Detailed Test Cases tab as DEFAULT!
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Báo cáo Phản biện Đồ án Capstone'),
+          elevation: 1,
+          actions: [
+            if (isExporting)
+              const Padding(
+                padding: EdgeInsets.only(right: 16),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else ...[
+              TextButton.icon(
+                onPressed: _exportPdf,
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                label: const Text('Xuất PDF'),
               ),
-            ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: ElevatedButton.icon(
+                  onPressed: _exportExcel,
+                  icon: const Icon(Icons.table_view),
+                  label: const Text('Xuất Excel'),
+                ),
+              ),
+            ],
           ],
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+          bottom: TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            labelColor: Theme.of(context).colorScheme.primary,
+            indicatorColor: Theme.of(context).colorScheme.primary,
+            tabs: [
+              Tab(
+                icon: const Icon(Icons.fact_check_outlined),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Chi tiết Test Case'),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: issuesCount > 0
+                            ? Colors.red.shade100
+                            : Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${bundle.caseReviews.length}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: issuesCount > 0
+                              ? Colors.red.shade900
+                              : Colors.green.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Tab(
+                icon: Icon(Icons.dashboard_outlined),
+                text: 'Tổng quan',
+              ),
+              const Tab(
+                icon: Icon(Icons.compare_arrows_outlined),
+                text: 'Đối chiếu 3 nguồn',
+              ),
+              Tab(
+                icon: const Icon(Icons.warning_amber_rounded),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Lỗi & Toàn vẹn'),
+                    if (bundle.checks.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${bundle.checks.length}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Tab(
+                icon: const Icon(Icons.verified_outlined),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Nhận định đã xác minh'),
+                    if (verifiedCount > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade100,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$verifiedCount',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Tab(
+                icon: Icon(Icons.description_outlined),
+                text: 'Báo cáo đầy đủ',
               ),
             ],
           ),
-          padding: const EdgeInsets.all(32.0),
-          child: Markdown(
-            data: widget.bundle.markdown,
-            selectable: true,
-          ),
+        ),
+        body: TabBarView(
+          children: [
+            DetailedTestCasesTab(caseReviews: bundle.caseReviews),
+            OverviewTab(
+              stats: bundle.stats,
+              crossCheck: bundle.crossCheck,
+              totalRecordsCount: bundle.records.length,
+            ),
+            ReconciliationTab(crossCheck: bundle.crossCheck),
+            IntegrityTab(
+              hardChecks: bundle.checks,
+              crossCheck: bundle.crossCheck,
+            ),
+            VerifiedFindingsTab(
+              verifiedFindings: bundle.verifiedFindings,
+            ),
+            FullReportTab(markdown: bundle.markdown),
+          ],
         ),
       ),
     );

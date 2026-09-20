@@ -9,6 +9,7 @@ import 'ai_service.dart';
 import 'coverage_stats.dart';
 import 'cross_check_engine.dart';
 import 'hard_checks.dart';
+import 'test_case_review_engine.dart';
 
 class ExcelExportService {
   Future<String?> export({
@@ -16,6 +17,7 @@ class ExcelExportService {
     required List<HardCheckFinding> checks,
     required List<TestCaseRecord> records,
     required String reviewMarkdown,
+    List<TestCaseReview> caseReviews = const [],
     CrossCheckResult? crossCheck,
     List<VerifiedFinding> verifiedFindings = const [],
     String suggestedName = 'capstone-review.xlsx',
@@ -27,6 +29,7 @@ class ExcelExportService {
         checks: checks,
         records: records,
         reviewMarkdown: reviewMarkdown,
+        caseReviews: caseReviews,
         crossCheck: crossCheck,
         verifiedFindings: verifiedFindings,
       ),
@@ -52,6 +55,7 @@ class ExcelExportService {
     required List<HardCheckFinding> checks,
     required List<TestCaseRecord> records,
     required String reviewMarkdown,
+    List<TestCaseReview> caseReviews = const [],
     CrossCheckResult? crossCheck,
     List<VerifiedFinding> verifiedFindings = const [],
   }) {
@@ -514,23 +518,55 @@ class ExcelExportService {
     // 5. Sheet Test_cases (DANH SÁCH TOÀN BỘ CÁC CA TEST)
     // ==========================================
     final tc = excel['Test_cases'];
-    tc.setColumnWidth(0, 22.0);
-    tc.setColumnWidth(1, 18.0);
-    tc.setColumnWidth(2, 35.0);
-    tc.setColumnWidth(3, 35.0);
-    tc.setColumnWidth(4, 35.0);
+    tc.setColumnWidth(0, 20.0);
+    tc.setColumnWidth(1, 16.0);
+    tc.setColumnWidth(2, 32.0);
+    tc.setColumnWidth(3, 32.0);
+    tc.setColumnWidth(4, 32.0);
     tc.setColumnWidth(5, 14.0);
+    tc.setColumnWidth(6, 24.0);
+    tc.setColumnWidth(7, 10.0);
+    tc.setColumnWidth(8, 22.0);
+    tc.setColumnWidth(9, 20.0);
+    tc.setColumnWidth(10, 45.0);
 
     _styledRow(
       tc,
       0,
-      ['Sheet / Module', 'Mã Test Case', 'Mô tả kiểm thử', 'Các bước thực hiện', 'Kết quả mong đợi', 'Trạng thái'],
+      [
+        'Sheet / Module',
+        'Mã Test Case',
+        'Mô tả kiểm thử',
+        'Các bước thực hiện',
+        'Kết quả mong đợi',
+        'Trạng thái',
+        'Đánh giá chất lượng',
+        'Số lỗi',
+        'Mã lỗi phát hiện',
+        'Trường vi phạm',
+        'Chi tiết lỗi & Hướng khắc phục',
+      ],
       style: headerStyle,
     );
 
     for (var i = 0; i < records.length; i++) {
       final r = records[i];
       final st = normalizeStatus(r.status);
+      final rev = i < caseReviews.length ? caseReviews[i] : null;
+      final verdict = rev?.verdictLabel ?? 'Chưa đánh giá';
+      final issueCount = rev != null ? rev.issues.length.toString() : '0';
+      final issueCodes =
+          rev?.issues.map((e) => e.code).join(', ') ?? '';
+      final affectedFields = rev?.issues
+              .map((e) => e.field.name)
+              .toSet()
+              .join(', ') ??
+          '';
+      final issueDetails = rev?.issues
+              .map((e) => '[${e.code}] ${e.message} ➔ ${e.correction}')
+              .join('\n') ??
+          '';
+
       _styledRow(
         tc,
         i + 1,
@@ -541,11 +577,15 @@ class ExcelExportService {
           r.steps,
           r.expected,
           st,
+          verdict,
+          issueCount,
+          issueCodes,
+          affectedFields,
+          issueDetails,
         ],
         style: wrapStyle,
       );
     }
-
     final encoded = excel.encode();
     if (encoded == null) {
       throw Exception('Không tạo được file Excel.');

@@ -50,7 +50,7 @@ class UploadScreen extends ConsumerWidget {
                             labelText: 'Chọn AI Provider',
                             border: OutlineInputBorder(),
                           ),
-                          value: state.provider,
+                          initialValue: state.provider,
                           items: const [
                             DropdownMenuItem(
                               value: AIProvider.gemini,
@@ -130,20 +130,22 @@ class UploadScreen extends ConsumerWidget {
                       children: [
                         Expanded(
                           child: _FileDropZone(
-                            title: 'File Test Report (Excel)',
-                            icon: Icons.table_chart,
-                            color: Colors.green,
-                            filePath: state.excelPath,
+                            title: 'Phiếu Đăng Ký Đề Tài',
+                            subtitle: 'Bắt buộc • .pdf, .docx',
+                            icon: Icons.assignment,
+                            color: Colors.orange.shade800,
+                            filePath: state.registrationPath,
                             enabled: !locked,
-                            onSelect: controller.pickExcelFile,
-                            onClear: controller.clearExcel,
+                            onSelect: controller.pickRegistrationFile,
+                            onClear: controller.clearRegistration,
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: _FileDropZone(
-                            title: 'File SRS (PDF/Word)',
-                            icon: Icons.picture_as_pdf,
+                            title: 'File SRS (Đặc tả dự án)',
+                            subtitle: 'Bắt buộc • .pdf, .docx',
+                            icon: Icons.description,
                             color: Colors.deepPurple,
                             filePath: state.srsPath,
                             enabled: !locked,
@@ -154,13 +156,14 @@ class UploadScreen extends ConsumerWidget {
                         const SizedBox(width: 16),
                         Expanded(
                           child: _FileDropZone(
-                            title: 'Phiếu đăng ký (không bắt buộc)',
-                            icon: Icons.badge_outlined,
-                            color: Colors.blueGrey,
-                            filePath: state.registrationPath,
+                            title: 'File Test Report (Excel)',
+                            subtitle: 'Bắt buộc • .xlsx, .xls',
+                            icon: Icons.table_chart,
+                            color: Colors.green,
+                            filePath: state.excelPath,
                             enabled: !locked,
-                            onSelect: controller.pickRegistrationFile,
-                            onClear: controller.clearRegistration,
+                            onSelect: controller.pickExcelFile,
+                            onClear: controller.clearExcel,
                           ),
                         ),
                       ],
@@ -236,6 +239,19 @@ class UploadScreen extends ConsumerWidget {
                       ],
                     ],
                   ),
+                  if (!state.canAnalyze && !state.isAnalyzing) ...[
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Text(
+                        'Chưa sẵn sàng: thiếu ${state.missingInputs.join(', ')}',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             );
@@ -247,6 +263,7 @@ class UploadScreen extends ConsumerWidget {
 
 class _FileDropZone extends StatelessWidget {
   final String title;
+  final String subtitle;
   final IconData icon;
   final Color color;
   final String? filePath;
@@ -256,6 +273,7 @@ class _FileDropZone extends StatelessWidget {
 
   const _FileDropZone({
     required this.title,
+    required this.subtitle,
     required this.icon,
     required this.color,
     this.filePath,
@@ -263,7 +281,6 @@ class _FileDropZone extends StatelessWidget {
     required this.onSelect,
     required this.onClear,
   });
-
   @override
   Widget build(BuildContext context) {
     final bool hasFile = filePath != null;
@@ -293,13 +310,23 @@ class _FileDropZone extends StatelessWidget {
                         Icon(icon, size: 48, color: color),
                         const SizedBox(height: 12),
                         Text(
+                          title,
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
                           'Đã chọn file:',
                           style: TextStyle(
                             color: Colors.grey.shade600,
-                            fontSize: 13,
+                            fontSize: 12,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
@@ -343,10 +370,23 @@ class _FileDropZone extends StatelessWidget {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
                     Text(
                       'Nhấn để chọn file',
-                      style: TextStyle(color: Colors.grey.shade600),
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),

@@ -4,6 +4,7 @@ import 'package:capstone_reviewer/core/services/coverage_stats.dart';
 import 'package:capstone_reviewer/core/services/cross_check_engine.dart';
 import 'package:capstone_reviewer/core/services/excel_export_service.dart';
 import 'package:capstone_reviewer/core/services/hard_checks.dart';
+import 'package:capstone_reviewer/core/services/test_case_review_engine.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -117,6 +118,50 @@ Cover updated 2026-08-21T00:00:00.000Z
       expect(aiRows, contains('1. Khắc phục'));
       expect(aiRows, contains('WIP Isolation'));
       expect(aiRows, contains('Only Creator can delete files in WIP area'));
+    });
+
+    test('ExcelExportService includes detailed test case review columns when caseReviews are provided', () {
+      final records = [
+        testRec(sheet: 'M01', id: 'TC01', status: 'Passed'),
+        const TestCaseRecord(
+          sheet: 'M01',
+          id: '',
+          description: '',
+          steps: '',
+          expected: '',
+        ),
+      ];
+
+      final caseReviews = TestCaseReviewEngine.reviewAll(records: records);
+      final bytes = ExcelExportService().buildWorkbook(
+        stats: computeCoverage(srsText: '', records: records, unknownModules: const []),
+        checks: const [],
+        records: records,
+        caseReviews: caseReviews,
+        reviewMarkdown: '# Review',
+      );
+
+      final excel = Excel.decodeBytes(bytes);
+      expect(excel.tables.containsKey('Test_cases'), isTrue);
+      final tcSheet = excel.tables['Test_cases']!;
+
+      // Check header columns
+      final headers = tcSheet.rows.first.map((c) => c?.value?.toString() ?? '').toList();
+      expect(headers, contains('Đánh giá chất lượng'));
+      expect(headers, contains('Số lỗi'));
+      expect(headers, contains('Mã lỗi phát hiện'));
+      expect(headers, contains('Trường vi phạm'));
+      expect(headers, contains('Chi tiết lỗi & Hướng khắc phục'));
+
+      // Row 1 (TC01 - clean or info)
+      final row1 = tcSheet.rows[1].map((c) => c?.value?.toString() ?? '').toList();
+      expect(row1[0], equals('M01'));
+      expect(row1[1], equals('TC01'));
+
+      // Row 2 (incomplete - critical)
+      final row2 = tcSheet.rows[2].map((c) => c?.value?.toString() ?? '').toList();
+      expect(row2[6], equals('Lỗi nghiêm trọng'));
+      expect(row2[8], contains('missing-id'));
     });
   });
 }
