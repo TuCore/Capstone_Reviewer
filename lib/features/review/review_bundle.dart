@@ -3,8 +3,8 @@ import '../../core/services/coverage_stats.dart';
 import '../../core/services/ai_service.dart';
 import '../../core/services/cross_check_engine.dart';
 import '../../core/services/hard_checks.dart';
+import '../../core/services/registration_pii.dart';
 import '../../core/services/test_case_review_engine.dart';
-
 class ReviewBundle {
   const ReviewBundle({
     required this.markdown,
@@ -14,6 +14,10 @@ class ReviewBundle {
     required this.caseReviews,
     this.crossCheck,
     this.verifiedFindings = const [],
+    this.registrationContext,
+    this.projectInfo,
+    this.excelAvailability = const ExtractionAvailability.complete(),
+    this.docAvailability = const ExtractionAvailability.complete(),
   });
 
   final String markdown;
@@ -23,4 +27,8 @@ class ReviewBundle {
   final List<TestCaseReview> caseReviews;
   final CrossCheckResult? crossCheck;
   final List<VerifiedFinding> verifiedFindings;
+  final RegistrationContext? registrationContext;
+  final ProjectInfo? projectInfo;
+  final ExtractionAvailability excelAvailability;
+  final ExtractionAvailability docAvailability;
 }

@@ -4,6 +4,8 @@ import 'package:capstone_reviewer/core/services/coverage_stats.dart';
 import 'package:capstone_reviewer/core/services/cross_check_engine.dart';
 import 'package:capstone_reviewer/core/services/excel_export_service.dart';
 import 'package:capstone_reviewer/core/services/hard_checks.dart';
+import 'package:capstone_reviewer/core/services/pdf_export_service.dart';
+import 'package:capstone_reviewer/core/services/registration_pii.dart';
 import 'package:capstone_reviewer/core/services/test_case_review_engine.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -80,6 +82,10 @@ Cover updated 2026-08-21T00:00:00.000Z
         reviewMarkdown: '# Báo cáo đánh giá AI\n\nNội dung chi tiết...',
         crossCheck: crossCheck,
         verifiedFindings: verifiedFindings,
+        registrationContext: const RegistrationContext(
+          topic: 'Custom Capstone Project',
+          description: 'Custom Description',
+        ),
       );
 
       expect(bytes, isNotEmpty);
@@ -95,17 +101,14 @@ Cover updated 2026-08-21T00:00:00.000Z
       // Check Sheet Tong_quan (Part 1)
       final tqRows = excel.tables['Tong_quan']!.rows.map((r) => r.map((c) => c?.value?.toString() ?? '').join(' ')).join('\n');
       expect(tqRows, contains('THÔNG TIN BÌA'));
-      expect(tqRows, contains('SU26SE017'));
+      expect(tqRows, contains('Custom Capstone Project'));
+      expect(tqRows, isNot(contains('SU26SE017')));
 
       // Check Sheet Doi_chieu_so_lieu (Part 2)
       final dcRows = excel.tables['Doi_chieu_so_lieu']!.rows.map((r) => r.map((c) => c?.value?.toString() ?? '').join(' ')).join('\n');
       expect(dcRows, contains('BẢNG ĐỐI CHIẾU SỐ LIỆU 3 NGUỒN'));
-      expect(dcRows, contains('Word (Report5 §5.2)'));
-      expect(dcRows, contains('Excel (Test Statistics)'));
+      expect(dcRows, isNot(contains('Report5')));
       expect(dcRows, contains('Đếm Thực Tế'));
-      expect(dcRows, contains('PostgreSQL (Supabase)'));
-      expect(dcRows, contains('Azure SQL Database'));
-
       // Check Sheet Hard_checks (Part 3)
       final hcRows = excel.tables['Hard_checks']!.rows.map((r) => r.map((c) => c?.value?.toString() ?? '').join(' ')).join('\n');
       expect(hcRows, contains('TC-NOT-UI-06'));
@@ -162,6 +165,65 @@ Cover updated 2026-08-21T00:00:00.000Z
       final row2 = tcSheet.rows[2].map((c) => c?.value?.toString() ?? '').toList();
       expect(row2[6], equals('Lỗi nghiêm trọng'));
       expect(row2[8], contains('missing-id'));
+    });
+
+    test('PdfExportService sanitizes emojis and renders inline markdown without crashing', () async {
+      const markdown = '''
+# BÁO CÁO ĐÁNH GIÁ ĐỒ ÁN CAPSTONE: SRS ⟷ TEST REPORT
+
+## 📋 PHẦN 1: THÔNG TIN BÌA & THIẾT LẬP MÔI TRƯỜNG
+- **Tên đề tài:** Design & Implementation of a CDE System for BIM
+- **Mã dự án:** SU26SE017 (GSU10)
+- **Cơ sở dữ liệu:** Azure SQL Database (Excel) vs PostgreSQL (Word)
+
+## 🔬 KẾT QUẢ ĐỐI CHIẾU SỐ HỌC & TÍNH NHẤT QUÁN (DETERMINISTIC CODE ENGINE)
+*Toàn bộ kết quả tính toán 100% bằng code thuần, không qua AI.*
+
+| Chỉ Số | SRS (Word) | Khai Báo (Excel) | Đếm Thực (Excel) | Lệch (SRS vs Thực) | Lệch (Khai báo vs Thực) |
+|---|---|---|---|---|---|
+| **Tổng số ca** | 320 | N/A | 338 | 18 | N/A |
+| **Passed** | N/A | N/A | 304 | N/A | N/A |
+| `TC-NOT-UI-05` | M07, M08 | M07: **PASSED**<br>M08: **PASSED** | Đồng nhất | N/A | N/A |
+''';
+
+      // Sanitizer check
+      final sanitizedHeader = PdfExportService.sanitizeText('## 📋 PHẦN 1: THÔNG TIN BÌA \x07 & THIẾT LẬP MÔI TRƯỜNG');
+      expect(sanitizedHeader.contains('📋'), isFalse);
+      expect(sanitizedHeader.contains('\x07'), isFalse);
+      expect(sanitizedHeader, contains('PHẦN 1: THÔNG TIN BÌA'));
+
+      // Document build check
+      final pdf = PdfExportService.buildPdfDocument(markdown);
+      final bytes = await pdf.save();
+      expect(bytes.isNotEmpty, isTrue);
+      expect(String.fromCharCodes(bytes.take(5)), equals('%PDF-'));
+    });
+    test('ExcelExportService prevents formula injection by emitting TextCellValue for leading =, +, -, @', () {
+      final records = [
+        testRec(sheet: 'M01', id: 'TC01', status: '=1+1'),
+        testRec(sheet: 'M01', id: 'TC02', status: '+cmd|/C calc'),
+        testRec(sheet: 'M01', id: 'TC03', status: '-10'),
+        testRec(sheet: 'M01', id: 'TC04', status: '@SUM(1,2)'),
+      ];
+
+      final bytes = ExcelExportService().buildWorkbook(
+        stats: computeCoverage(srsText: '', records: records, unknownModules: const []),
+        checks: const [],
+        records: records,
+        reviewMarkdown: '# Safe Markdown',
+      );
+
+      final excel = Excel.decodeBytes(bytes);
+      final tcSheet = excel.tables['Test_cases']!;
+
+      for (final row in tcSheet.rows) {
+        for (final cell in row) {
+          if (cell?.value != null) {
+            expect(cell!.value, isA<TextCellValue>());
+            expect(cell.value, isNot(isA<FormulaCellValue>()));
+          }
+        }
+      }
     });
   });
 }

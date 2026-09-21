@@ -9,6 +9,7 @@ import 'ai_service.dart';
 import 'coverage_stats.dart';
 import 'cross_check_engine.dart';
 import 'hard_checks.dart';
+import 'registration_pii.dart';
 import 'test_case_review_engine.dart';
 
 class ExcelExportService {
@@ -20,6 +21,8 @@ class ExcelExportService {
     List<TestCaseReview> caseReviews = const [],
     CrossCheckResult? crossCheck,
     List<VerifiedFinding> verifiedFindings = const [],
+    RegistrationContext? registrationContext,
+    ProjectInfo? projectInfo,
     String suggestedName = 'capstone-review.xlsx',
   }) async {
     final sanitized = sanitizeFileName(suggestedName);
@@ -32,6 +35,8 @@ class ExcelExportService {
         caseReviews: caseReviews,
         crossCheck: crossCheck,
         verifiedFindings: verifiedFindings,
+        registrationContext: registrationContext,
+        projectInfo: projectInfo,
       ),
     );
 
@@ -58,6 +63,8 @@ class ExcelExportService {
     List<TestCaseReview> caseReviews = const [],
     CrossCheckResult? crossCheck,
     List<VerifiedFinding> verifiedFindings = const [],
+    RegistrationContext? registrationContext,
+    ProjectInfo? projectInfo,
   }) {
     final excel = Excel.createExcel();
     excel.rename('Sheet1', 'Tong_quan');
@@ -115,37 +122,40 @@ class ExcelExportService {
       ['Thông tin hành chính & Đề tài', 'Giá trị trích xuất', 'Ghi chú thẩm định'],
       style: sectionStyle,
     );
+    final topic = (projectInfo != null && projectInfo.topic.isNotEmpty)
+        ? projectInfo.topic
+        : ((registrationContext != null && registrationContext.topic.isNotEmpty)
+            ? registrationContext.topic
+            : 'Chưa xác định');
     _styledRow(overview, rIdx++, [
       'Tên đề tài Capstone',
-      'Design & Implementation of a CDE System for BIM',
-      'Khớp giữa Word và Excel Test Report',
-    ]);
-    _styledRow(overview, rIdx++, [
-      'Mã dự án (Project Code)',
-      'SU26SE017 (GSU10)',
-      'Khớp mã dự án',
-    ]);
-    _styledRow(overview, rIdx++, [
-      'Ngày phát hành bìa (Cover Issue Date)',
-      '23/07/2026',
-      'Lệch với ngày chốt phiên bản 21/08/2026 trong Revision History',
-    ]);
-    _styledRow(overview, rIdx++, [
-      'Môi trường triển khai Frontend',
-      'Vercel (React / Web App)',
-      'Trích từ mục lục Test Cases',
-    ]);
-    _styledRow(overview, rIdx++, [
-      'Cơ sở dữ liệu khai báo',
-      'Azure SQL Database (Excel) vs PostgreSQL (Word)',
-      '🚨 MÂU THUẪN MÔI TRƯỜNG DATABASE GIỮA 2 TÀI LIỆU',
-    ], style: alertStyle);
-    _styledRow(overview, rIdx++, [
-      'Công cụ kiểm thử tự động',
-      'Playwright, Node.js',
-      'E2E Automation Testing',
+      topic,
+      'Trích xuất từ AI / Phiếu đăng ký / Tài liệu',
     ]);
 
+    if (projectInfo != null && projectInfo.techStack.isNotEmpty) {
+      _styledRow(overview, rIdx++, [
+        'Công nghệ nhận diện (AI Tech Stack)',
+        projectInfo.techStack.join(', '),
+        'Phân tích ngữ nghĩa tự động từ AI',
+      ]);
+    }
+
+    if (crossCheck != null && crossCheck.environmentMismatches.isNotEmpty) {
+      for (final env in crossCheck.environmentMismatches) {
+        _styledRow(overview, rIdx++, [
+          env.category,
+          'SRS: ${env.wordValue} vs Excel: ${env.excelValue}',
+          '[MÂU THUẪN] ${env.description}',
+        ], style: alertStyle);
+      }
+    } else {
+      _styledRow(overview, rIdx++, [
+        'Môi trường & CSDL',
+        'Đồng nhất hoặc chưa khai báo',
+        'Không phát hiện mâu thuẫn',
+      ]);
+    }
     rIdx++;
     _styledRow(
       overview,
@@ -173,8 +183,8 @@ class ExcelExportService {
           : 'Chưa đạt chuẩn bao phủ khuyến nghị (< 80%)',
     ]);
 
-    final actualFailed = crossCheck?.metricsComparison.actualFailed ?? stats.failed;
-    final actualPassed = crossCheck?.metricsComparison.actualPassed ?? stats.passed;
+    final int actualFailed = crossCheck?.metricsComparison.actualFailed.value ?? stats.failed;
+    final int actualPassed = crossCheck?.metricsComparison.actualPassed.value ?? stats.passed;
 
     _styledRow(
       overview,
@@ -193,7 +203,7 @@ class ExcelExportService {
         'Test Cases: FAILED (Đếm thực tế)',
         '$actualFailed',
         actualFailed > 0
-            ? '🚨 Có $actualFailed ca FAILED thực tế nhưng báo cáo Word/Excel khai báo 0 Fail!'
+            ? '[CẢNH BÁO] Có $actualFailed ca FAILED thực tế nhưng báo cáo Word/Excel khai báo 0 Fail!'
             : '0 ca thất bại',
       ],
       style: actualFailed > 0 ? alertStyle : null,
@@ -233,60 +243,63 @@ class ExcelExportService {
     _styledRow(
       compSheet,
       cIdx++,
-      ['Tiêu chí so khớp', 'Word (Report5 §5.2)', 'Excel (Test Statistics)', 'Đếm Thực Tế (M01-M10)', 'Sai Lệch & Nhận Định'],
+      ['Tiêu chí so khớp', 'SRS (Word)', 'Khai Báo (Excel)', 'Đếm Thực Tế', 'Sai Lệch & Nhận Định'],
       style: sectionStyle,
     );
 
     final m = crossCheck?.metricsComparison;
-    final wTot = m?.wordTotal ?? 320;
-    final eTot = m?.excelDeclaredTotal ?? 338;
-    final aTot = m?.actualTotal ?? records.length;
-    final diffTot = aTot - wTot;
+    final wTot = m?.wordTotal.displayValue ?? 'N/A';
+    final eTot = m?.excelDeclaredTotal.displayValue ?? 'N/A';
+    final aTot = m?.actualTotal.displayValue ?? '${records.length}';
+    final hasDiff = m != null && m.totalDiscrepancy.isAvailable && m.totalDiscrepancy.value != 0;
 
     _styledRow(compSheet, cIdx++, [
       'Tổng số ca kiểm thử (Total Cases)',
-      '$wTot',
-      '$eTot',
-      '$aTot',
-      diffTot != 0 ? 'Lệch $diffTot ca (Word thiếu 18 ca ở M04 BIM 3D Viewer)' : 'Khớp',
-    ], style: diffTot != 0 ? alertStyle : null);
+      wTot,
+      eTot,
+      aTot,
+      hasDiff ? 'Lệch ${m.totalDiscrepancy.value} ca' : (m?.totalDiscrepancy.isAvailable == true ? 'Khớp' : 'N/A'),
+    ], style: hasDiff ? alertStyle : null);
 
-    final wPass = (m?.wordAuto ?? 267) + (m?.wordManual ?? 53);
-    final ePass = m?.excelDeclaredPassed ?? 338;
-    final aPass = m?.actualPassed ?? actualPassed;
-    final passPct = (aPass * 100 / (aTot == 0 ? 1 : aTot)).toStringAsFixed(1);
+    final wPass = 'N/A';
+    final ePass = m?.excelDeclaredPassed.displayValue ?? 'N/A';
+    final aPass = m?.actualPassed.displayValue ?? '$actualPassed';
+    final passPct = (m != null && m.actualTotal.isAvailable && m.actualTotal.value! > 0)
+        ? (m.actualPassed.value! * 100 / m.actualTotal.value!).toStringAsFixed(1)
+        : (records.isNotEmpty ? (actualPassed * 100 / records.length).toStringAsFixed(1) : '0.0');
 
     _styledRow(compSheet, cIdx++, [
       'Số ca Passed (Thành công)',
-      '$wPass (100%)',
-      '$ePass (100%)',
+      wPass,
+      ePass,
       '$aPass ($passPct%)',
-      'Thực tế chỉ đạt $passPct%, khai báo 100% Pass là không đúng sự thật',
+      'Tỷ lệ Passed thực tế: $passPct%',
     ], style: alertStyle);
 
-    final wFail = m?.wordFailed ?? 0;
-    final eFail = m?.excelDeclaredFailed ?? 0;
-    final aFail = m?.actualFailed ?? actualFailed;
+    final wFail = m?.wordFailed.displayValue ?? 'N/A';
+    final eFail = m?.excelDeclaredFailed.displayValue ?? 'N/A';
+    final aFail = m?.actualFailed.displayValue ?? '$actualFailed';
+    final hasConcealed = m != null && m.concealedFails.isAvailable && m.concealedFails.value! > 0;
 
     _styledRow(compSheet, cIdx++, [
       'Số ca Failed (Thất bại)',
-      '$wFail',
-      '$eFail',
-      '$aFail',
-      aFail > 0 ? '🚨 Khai báo 0 Fail nhưng đếm thật có $aFail ca FAILED chưa sửa!' : 'Khớp',
-    ], style: aFail > 0 ? alertStyle : null);
+      wFail,
+      eFail,
+      aFail,
+      hasConcealed ? '[CẢNH BÁO] Khai báo ${m.wordFailed.value ?? 0} Fail nhưng đếm thật có ${m.actualFailed.value} ca FAILED!' : 'Khớp hoặc N/A',
+    ], style: hasConcealed ? alertStyle : null);
 
-    final wMan = m?.wordManual ?? 53;
-    final wAut = m?.wordAuto ?? 267;
-    final aMan = m?.actualManual ?? 71;
-    final aAut = m?.actualAuto ?? 267;
+    final wMan = m?.wordManual.displayValue ?? 'N/A';
+    final wAut = m?.wordAuto.displayValue ?? 'N/A';
+    final aMan = m?.actualManual.displayValue ?? 'N/A';
+    final aAut = m?.actualAuto.displayValue ?? 'N/A';
 
     _styledRow(compSheet, cIdx++, [
       'Phân loại Manual vs Automated',
       '$wMan Manual / $wAut Auto',
-      'Khai báo 100% Pass',
+      'N/A',
       '$aMan Manual / $aAut Auto',
-      'Lệch ${aMan - wMan} ca Manual ($wMan vs $aMan)',
+      (m != null && m.manualDiscrepancy.isAvailable) ? 'Lệch ${m.manualDiscrepancy.value} ca Manual' : 'N/A',
     ]);
 
     cIdx++;
@@ -303,7 +316,7 @@ class ExcelExportService {
           env.category,
           env.wordValue,
           'Excel: ${env.excelValue}${env.registrationValue != null ? ' | ĐK: ${env.registrationValue}' : ''}',
-          '🚨 LỆCH MÔI TRƯỜNG',
+          '[LỆCH MÔI TRƯỜNG]',
           env.description,
         ], style: alertStyle);
       }
@@ -323,7 +336,7 @@ class ExcelExportService {
           'Tiến độ: ${time.milestoneName}',
           'Hạn chót: ${time.milestoneDeadline}',
           'Thực hiện test: ${time.testExecutionDate}',
-          '🚨 TRỄ HẠN TEST',
+          '[TRỄ HẠN TEST]',
           time.description,
         ], style: alertStyle);
       }
@@ -450,36 +463,36 @@ class ExcelExportService {
       style: sectionStyle,
     );
     final recList = <List<String>>[];
-    if (actualFailed > 0) {
+    final mComp = crossCheck?.metricsComparison;
+    if (mComp != null && mComp.concealedFails.isAvailable && mComp.concealedFails.value! > 0) {
       recList.add([
-        '${recList.length + 1}. Khắc phục $actualFailed ca FAILED',
+        '${recList.length + 1}. Khắc phục ${mComp.actualFailed.value ?? 0} ca FAILED',
         'Độ ưu tiên: KHẨN CẤP',
-        'Excel Test Report đang có $actualFailed ca FAILED cần sửa chữa hoặc cập nhật trạng thái trước khi nghiệm thu.',
-        'M01-M10',
+        'Excel Test Report đang có ${mComp.actualFailed.value ?? 0} ca FAILED cần sửa chữa hoặc cập nhật trạng thái trước khi nghiệm thu.',
+        'Toàn bộ ca kiểm thử',
       ]);
     }
-    if (crossCheck != null && crossCheck.metricsComparison.totalDiscrepancy != 0) {
-      final diff = crossCheck.metricsComparison.totalDiscrepancy.abs();
+    if (mComp != null && mComp.totalDiscrepancy.isAvailable && mComp.totalDiscrepancy.value != 0) {
       recList.add([
-        '${recList.length + 1}. Đồng nhất số liệu tổng các tài liệu',
+        '${recList.length + 1}. Đồng nhất số liệu tổng',
         'Độ ưu tiên: CAO',
-        'Số ca giữa Word (${crossCheck.metricsComparison.wordTotal}) và Excel (${crossCheck.metricsComparison.actualTotal}) lệch $diff ca. Cần đồng nhất bảng thống kê.',
-        'Word §5.2 ⟷ Excel',
+        'Lệch ${mComp.totalDiscrepancy.value} ca giữa SRS (${mComp.wordTotal.value ?? 0} ca) và Excel (${mComp.actualTotal.value ?? 0} ca). Cần cập nhật số liệu thống nhất.',
+        'SRS vs Excel',
       ]);
     }
     if (crossCheck != null && crossCheck.environmentMismatches.isNotEmpty) {
       recList.add([
-        '${recList.length + 1}. Thống nhất cơ sở dữ liệu & hạ tầng',
+        '${recList.length + 1}. Thống nhất cơ sở dữ liệu & môi trường',
         'Độ ưu tiên: CAO',
-        'Thống nhất một loại CSDL duy nhất trong toàn bộ báo cáo Word và Excel.',
-        'Kiến trúc hệ thống',
+        'Phát hiện mâu thuẫn thông tin môi trường giữa các tài liệu. Cần chuẩn hóa cấu hình.',
+        'Môi trường & CSDL',
       ]);
     }
     if (recList.isEmpty) {
       recList.add([
-        '1. Duy trì tính nhất quán',
-        'Độ ưu tiên: BÌNH THƯỜNG',
-        'Toàn bộ số liệu và môi trường giữa các tài liệu đã đồng nhất.',
+        '1. Rà soát độ phủ kiểm thử',
+        'Độ ưu tiên: TRUNG BÌNH',
+        'Tiếp tục hoàn thiện các ca kiểm thử cho kịch bản biên và ngoại lệ.',
         'Toàn dự án',
       ]);
     }
