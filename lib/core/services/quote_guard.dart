@@ -33,6 +33,7 @@ QuoteGuardResult stripHallucinatedQuotes(String aiText, List<String> sources) {
 
 bool containsLoose(String haystack, String quote) {
   final q = quote.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-  if (q.length < 12) return true;
-  return haystack.contains(q);
+  if (q.isEmpty) return false;
+  final h = haystack.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  return h.contains(q);
 }

@@ -8,6 +8,7 @@ import 'package:capstone_reviewer/core/services/hard_checks.dart';
 import 'package:capstone_reviewer/core/services/quote_guard.dart';
 import 'package:capstone_reviewer/core/services/registration_pii.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:capstone_reviewer/core/services/cross_check_engine.dart';
 
 TestCaseRecord rec({
   String sheet = 'Login',
@@ -90,6 +91,28 @@ void main() {
     expect(ctx.toPromptBlock(), isNot(contains('0912345678')));
   });
 
+  test('registration extracts multi-field Capstone project name and targeted description', () {
+    const raw = '''
+CAPSTONE PROJECT REGISTER
+Class: Duration time: from 11/05/2026 To 06/09/2026
+1. Register information for supervisor (if have)
+No. Fullname Phone E-Mail Title Supervisor
+1 Lâm Hữu Khánh Phương
+2. Register information for students (if have)
+Full name Student code Phone E-mail Role in Group
+1 Lê Thị Hải Hà SE160001 ha@fpt.edu.vn 0901234567 Team Leader
+3. Register content of Capstone Project (*)
+3.1. Capstone Project name: \x07English: Design and Implementation of a CDE System \x07Vietnamese: Thiết kế và phát triển hệ thống CDE \x07Abbreviation: SU26SE017
+a. Context: In the Vietnamese civil construction sector, BIM is increasingly mandated.
+b. Objectives: Build a cloud-based CDE repository.
+''';
+    final ctx = extractRegistrationContext(raw);
+    expect(ctx.topic, equals('Design and Implementation of a CDE System - Thiết kế và phát triển hệ thống CDE (SU26SE017)'));
+    expect(ctx.description, contains('In the Vietnamese civil construction sector'));
+    expect(ctx.description, isNot(contains('SE160001')));
+    expect(ctx.description, isNot(contains('Lâm Hữu Khánh Phương')));
+  });
+
   test('sanitize file name strips illegal chars', () {
     expect(sanitizeFileName(r'a<>:"/\|?*.xlsx'), 'a_.xlsx');
     expect(sanitizeFileName('   '), 'capstone-review.xlsx');
@@ -127,5 +150,86 @@ void main() {
     expect(geminiModel, 'gemini-2.5-flash');
   });
 
+  test('computeCoverage handles feature list from AI without regex guessing', () {
+    const aiFeatures = [
+      'UC01: Đăng nhập hệ thống',
+      'UC02: Quản lý người dùng',
+      'UC03: Xuất báo cáo',
+    ];
+    final records = [
+      rec(sheet: 'M01', description: 'Đăng nhập hệ thống'),
+      rec(sheet: 'M02', description: 'Quản lý người dùng'),
+    ];
+    final stats = computeCoverage(
+      records: records,
+      unknownModules: const [],
+      featureList: aiFeatures,
+    );
+    expect(stats.readUseCases.length, 3);
+    expect(stats.coveredUseCases.length, 2);
+    expect(stats.coverage, closeTo(0.66, 0.01));
+  });
 
+  test('mapHeaders resolves latest round when multiple round columns exist', () {
+    final headers = [
+      'Test Case ID',
+      'Description',
+      'Round 1 (Pass/Fail)',
+      'Round 2 (Pass/Fail)',
+      'Round 3 (Pass/Fail)',
+    ];
+    final mapped = mapHeaders(headers);
+    expect(mapped[CanonicalField.status], equals(4)); // Index 4 is Round 3
+  });
+
+  test('mapHeaders prioritizes explicit Final Status over earlier rounds', () {
+    final headers = [
+      'Test Case ID',
+      'Description',
+      'Round 1',
+      'Round 2',
+      'Final Status',
+    ];
+    final mapped = mapHeaders(headers);
+    expect(mapped[CanonicalField.status], equals(4)); // Index 4 is Final Status
+  });
+
+  test('computeCoverage prioritizes AI feature list over chapter headings', () {
+    const srs = '''
+# I. Giới thiệu tổng quan
+## 1.1 Bối cảnh đề tài
+## 1.2 Mục tiêu nghiên cứu
+# II. Đặc tả yêu cầu chức năng
+''';
+    const aiFeatures = [
+      'FR01: Đăng nhập hệ thống',
+      'FR02: Quản lý giỏ hàng',
+      'FR03: Thanh toán đơn hàng',
+    ];
+    final records = [
+      rec(sheet: 'M01', description: 'Đăng nhập hệ thống'),
+      rec(sheet: 'M02', description: 'Quản lý giỏ hàng'),
+    ];
+    final stats = computeCoverage(
+      srsText: srs,
+      records: records,
+      unknownModules: const [],
+      featureList: aiFeatures,
+    );
+    expect(stats.readUseCases, anyElement(contains('FR01')));
+    expect(stats.readUseCases, anyElement(contains('FR02')));
+    expect(stats.readUseCases, anyElement(contains('FR03')));
+    expect(stats.readUseCases, isNot(anyElement(contains('Giới thiệu tổng quan'))));
+    expect(stats.readUseCases, isNot(anyElement(contains('Bối cảnh đề tài'))));
+  });
+
+  test('checkEnvironmentMismatch delegates semantic checking to AI Axis 1 and returns clean empty list', () {
+    const word = 'Table 5: Database Environment: PostgreSQL (Supabase)';
+    const excel = 'Environment: Vercel (Frontend), Azure SQL Database';
+    final mismatches = CrossCheckEngine.checkEnvironmentMismatch(
+      wordText: word,
+      excelText: excel,
+    );
+    expect(mismatches, isEmpty);
+  });
 }

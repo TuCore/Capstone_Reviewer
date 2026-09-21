@@ -1,8 +1,6 @@
-import 'dart:io';
 import 'package:capstone_reviewer/core/extraction/test_case_schema.dart';
+import 'package:capstone_reviewer/core/extraction/workbook_snapshot.dart';
 import 'package:capstone_reviewer/core/services/cross_check_engine.dart';
-import 'package:capstone_reviewer/core/services/document_service.dart';
-import 'package:capstone_reviewer/core/services/excel_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 TestCaseRecord testRec({
@@ -26,7 +24,7 @@ TestCaseRecord testRec({
 }
 
 void main() {
-  group('CrossCheckEngine - Phase 1 Deterministic Unit Tests', () {
+  group('CrossCheckEngine - Grounded Deterministic Unit Tests', () {
     test('catches duplicate IDs and detects Pass/Fail status conflict', () {
       final records = [
         testRec(sheet: 'M07_Notifications', id: 'TC-NOT-UI-05', status: 'Passed'),
@@ -46,12 +44,14 @@ void main() {
       expect(tc06.sheets, containsAll(['M07_Notifications', 'M08_Dashboard_Reports']));
       expect(tc06.statusBySheet['M07_Notifications'], 'PASSED');
       expect(tc06.statusBySheet['M08_Dashboard_Reports'], 'FAILED');
+      expect(tc06.evidence, isNotNull);
+      expect(tc06.evidence!.value, 'TC-NOT-UI-06');
 
       final tc05 = dupes.firstWhere((d) => d.testId == 'TC-NOT-UI-05');
       expect(tc05.hasStatusConflict, isFalse);
     });
 
-    test('compares 3-way metrics and catches 18 discrepancy and 34 concealed fails', () {
+    test('compares 3-way metrics with grounded MetricValue results', () {
       final records = <TestCaseRecord>[
         for (var i = 1; i <= 304; i++)
           testRec(sheet: 'M01', id: 'TC-$i', status: 'Passed'),
@@ -72,41 +72,64 @@ void main() {
         wordText: wordText,
       );
 
-      expect(comp.wordTotal, 320);
-      expect(comp.actualTotal, 338);
-      expect(comp.totalDiscrepancy, 18);
-      expect(comp.actualFailed, 34);
-      expect(comp.concealedFails, 34);
-      expect(comp.actualManual, 71); // 338 - 267
-      expect(comp.manualDiscrepancy, 18); // 71 - 53
-      expect(comp.findings.length, greaterThanOrEqualTo(3));
+      expect(comp.wordTotalVal, 320);
+      expect(comp.actualTotalVal, 338);
+      expect(comp.totalDiscrepancyVal, 18);
+      expect(comp.actualFailedVal, 34);
+      expect(comp.concealedFailsVal, 34);
+      expect(comp.findings.length, greaterThanOrEqualTo(2));
+      // Ensure no BIM/M04 fabrication in findings
+      expect(comp.findings.any((f) => f.contains('BIM 3D Viewer')), isFalse);
     });
 
-    test('detects environment mismatch across Word, Excel, and Registration', () {
-      final word = 'Database Environment: PostgreSQL (Supabase)';
-      final excel = 'Test Environment: Azure SQL Database';
-      final reg = 'Infrastructure: Viettel Cloud Private Servers';
+    test('delegates environment mismatch to AI Axis 1 and returns clean empty list in Dart', () {
+      final word = 'Cơ sở dữ liệu: PostgreSQL (Supabase)';
+      final reg = 'Hạ tầng: Viettel Cloud Private Servers';
+
+      final wbSheet = WorkbookSheet(
+        name: 'Cover',
+        rows: [
+          WorkbookRow(
+            rowIndex: 0,
+            cells: [
+              const WorkbookCell(rowIndex: 0, columnIndex: 0, address: 'A1', kind: CellValueKind.text, text: 'Database'),
+              const WorkbookCell(rowIndex: 0, columnIndex: 1, address: 'B1', kind: CellValueKind.text, text: 'Azure SQL Database'),
+            ],
+          ),
+        ],
+      );
+      final wb = WorkbookSnapshot(sheets: [wbSheet]);
 
       final mismatches = CrossCheckEngine.checkEnvironmentMismatch(
         wordText: word,
-        excelText: excel,
         registrationText: reg,
+        workbook: wb,
       );
 
-      expect(mismatches.length, 1);
-      expect(mismatches.first.category, contains('Database'));
-      expect(mismatches.first.wordValue, 'PostgreSQL (Supabase)');
-      expect(mismatches.first.excelValue, 'Azure SQL Database');
-      expect(mismatches.first.registrationValue, contains('Viettel Cloud'));
+      // Dart does 0% regex keyword guessing; semantic comparison is delegated to AI Axis 1
+      expect(mismatches, isEmpty);
     });
 
     test('detects timeline conflict between Word milestone and Excel execution date', () {
-      final word = 'Final Test Report Approval | 03/08/2026 | 10/08/2026';
-      final excel = 'Cover sheet updated on 2026-08-21T00:00:00.000Z version 1.0';
+      final word = 'Final Test Report Approval | 10/08/2026';
+
+      final wbSheet = WorkbookSheet(
+        name: 'Cover',
+        rows: [
+          WorkbookRow(
+            rowIndex: 0,
+            cells: [
+              const WorkbookCell(rowIndex: 0, columnIndex: 0, address: 'A1', kind: CellValueKind.text, text: 'Test Date'),
+              const WorkbookCell(rowIndex: 0, columnIndex: 1, address: 'B1', kind: CellValueKind.text, text: '21/08/2026'),
+            ],
+          ),
+        ],
+      );
+      final wb = WorkbookSnapshot(sheets: [wbSheet]);
 
       final conflicts = CrossCheckEngine.checkMilestoneDelay(
         wordText: word,
-        excelText: excel,
+        workbook: wb,
       );
 
       expect(conflicts.length, 1);
@@ -115,65 +138,110 @@ void main() {
       expect(conflicts.first.testExecutionDate, '21/08/2026');
     });
 
-    test('detects copy-paste requirement and leftover placeholders', () {
+    test('detects leftover placeholders with evidence', () {
       final records = <TestCaseRecord>[];
-      final rawSheets = {
-        'M08_Dashboard_Reports': [
-          ['Test requirement', 'Verify that all dashboard widgets render correctly.'],
-        ],
-        'M09_User_Role_Permissions': [
-          ['Test requirement', 'Verify that all dashboard widgets render correctly.'],
-        ],
-      };
 
       final findings = CrossCheckEngine.checkAdministrativeAndIntegrity(
         records: records,
         wordText: 'Project: [Project Name] by Author Name',
-        rawSheets: rawSheets,
       );
 
-      expect(findings.any((f) => f.code == 'copy-paste-requirement'), isTrue);
       expect(findings.any((f) => f.code == 'placeholder-leftover'), isTrue);
+      final pFinding = findings.firstWhere((f) => f.code == 'placeholder-leftover');
+      expect(pFinding.evidence, isNotNull);
     });
 
-    test('golden run on real Report5 files when available', () {
-      final excelPath = 'D:/AShiroru/ProgramCode/Project/Team/prm-prj/lab1/New folder (3)/9747_HCM_SU26SE017_GSU10_HCM_Report5_TestReport.xlsx';
-      final docxPath = 'D:/AShiroru/ProgramCode/Project/Team/prm-prj/lab1/New folder (3)/9747_HCM_SU26SE017_GSU10_HCM_Report5.docx';
-      final regPath = 'D:/AShiroru/ProgramCode/Project/Team/prm-prj/lab1/New folder (3)/9747_HCM_SU26SE017_GSU10_HCM_SU26SE017_GSU26SE10_Projects.pdf';
-
-      if (!File(excelPath).existsSync() || !File(docxPath).existsSync()) return;
-
-      final excelResult = extractExcelSync(excelPath);
-      final docResult = extractDocumentSync(docxPath);
-      String? regText;
-      if (File(regPath).existsSync()) {
-        regText = extractDocumentSync(regPath).text;
-      }
-
-      final result = CrossCheckEngine.run(
-        records: excelResult.records,
-        wordText: docResult.text,
-        excelText: excelResult.text,
-        registrationText: regText,
-        rawSheets: excelResult.rawSheets,
+    test('TOC check does not misidentify description column as sheet target', () {
+      // Reproduction of screenshot bug: row[2] was description 'Uploading Various Formats'
+      final tcSheet = WorkbookSheet(
+        name: 'Test Cases',
+        rows: [
+          WorkbookRow(
+            rowIndex: 0,
+            cells: [
+              const WorkbookCell(rowIndex: 0, columnIndex: 0, address: 'A1', kind: CellValueKind.text, text: 'STT'),
+              const WorkbookCell(rowIndex: 0, columnIndex: 1, address: 'B1', kind: CellValueKind.text, text: 'Tên Module'),
+              const WorkbookCell(rowIndex: 0, columnIndex: 2, address: 'C1', kind: CellValueKind.text, text: 'Mô tả chi tiết'),
+            ],
+          ),
+          WorkbookRow(
+            rowIndex: 1,
+            cells: [
+              const WorkbookCell(rowIndex: 1, columnIndex: 0, address: 'A2', kind: CellValueKind.text, text: '1'),
+              const WorkbookCell(rowIndex: 1, columnIndex: 1, address: 'B2', kind: CellValueKind.text, text: 'M01'),
+              const WorkbookCell(rowIndex: 1, columnIndex: 2, address: 'C2', kind: CellValueKind.text, text: 'Uploading Various Formats'),
+            ],
+          ),
+        ],
       );
 
-      expect(result.duplicateIds.length, greaterThanOrEqualTo(3));
-      expect(result.duplicateIds.any((d) => d.testId == 'TC-NOT-UI-06' && d.hasStatusConflict), isTrue);
+      final wb = WorkbookSnapshot(sheets: [tcSheet]);
 
-      expect(result.metricsComparison.totalDiscrepancy, 18);
-      expect(result.metricsComparison.concealedFails, 34);
+      final findings = CrossCheckEngine.checkAdministrativeAndIntegrity(
+        records: [],
+        workbook: wb,
+      );
 
-      expect(result.environmentMismatches, isNotEmpty);
-      expect(result.timelineConflicts, isNotEmpty);
-      expect(result.integrityFindings.any((f) => f.code == 'copy-paste-requirement'), isTrue);
+      // Must NOT create broken-sheet-link for 'Uploading Various Formats'
+      expect(findings.any((f) => f.code == 'broken-sheet-link'), isFalse);
+    });
 
-      final md = result.toMarkdown();
-      expect(md, contains('TC-NOT-UI-06'));
-      expect(md, contains('PostgreSQL (Supabase)'));
-      expect(md, contains('Azure SQL Database'));
-      expect(md, contains('18 ca'));
-      expect(md, contains('34 ca FAILED'));
+    test('TOC check identifies broken sheet link when explicit Sheet Name column points to missing sheet', () {
+      final tcSheet = WorkbookSheet(
+        name: 'Test Cases',
+        rows: [
+          WorkbookRow(
+            rowIndex: 0,
+            cells: [
+              const WorkbookCell(rowIndex: 0, columnIndex: 0, address: 'A1', kind: CellValueKind.text, text: 'STT'),
+              const WorkbookCell(rowIndex: 0, columnIndex: 1, address: 'B1', kind: CellValueKind.text, text: 'Sheet Name'),
+            ],
+          ),
+          WorkbookRow(
+            rowIndex: 1,
+            cells: [
+              const WorkbookCell(rowIndex: 1, columnIndex: 0, address: 'A2', kind: CellValueKind.text, text: '1'),
+              const WorkbookCell(rowIndex: 1, columnIndex: 1, address: 'B2', kind: CellValueKind.text, text: 'Non_Existent_Sheet'),
+            ],
+          ),
+        ],
+      );
+
+      final wb = WorkbookSnapshot(sheets: [tcSheet]);
+
+      final findings = CrossCheckEngine.checkAdministrativeAndIntegrity(
+        records: [],
+        workbook: wb,
+      );
+
+      expect(findings.any((f) => f.code == 'broken-sheet-link'), isTrue);
+      final bFinding = findings.firstWhere((f) => f.code == 'broken-sheet-link');
+      expect(bFinding.evidence, isNotNull);
+      expect(bFinding.evidence!.value, 'Non_Existent_Sheet');
+    });
+
+    test('detects WIP isolation and Published integrity violations', () {
+      final records = [
+        testRec(
+          sheet: 'M03',
+          id: 'TC-DOC-01',
+          desc: 'PM can thiệp xóa file trong WIP',
+          expected: 'File bị xóa thành công',
+        ),
+        testRec(
+          sheet: 'M03',
+          id: 'TC-DOC-02',
+          desc: 'User modify file trong Published',
+          expected: 'File được sửa đổi thành công',
+        ),
+      ];
+
+      final findings = CrossCheckEngine.checkAdministrativeAndIntegrity(
+        records: records,
+      );
+
+      expect(findings.any((f) => f.code == 'wip-isolation-violation'), isTrue);
+      expect(findings.any((f) => f.code == 'published-integrity-violation'), isTrue);
     });
   });
 }

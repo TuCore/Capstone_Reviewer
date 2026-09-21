@@ -211,5 +211,94 @@ void main() {
       expect(results.first.quote, 'Creator only in WIP');
       expect(results.first.module, 'M03');
     });
+
+    test('parseGeneratorResultJson parses project metadata and 6-axis findings', () {
+      const rawJson = '''```json
+{
+  "project_info": {
+    "topic": "CDE System for BIM Management",
+    "description": "Nền tảng quản lý môi trường dữ liệu chung cho ngành xây dựng",
+    "tech_stack": ["Flutter", "PostgreSQL", "Supabase", "Azure"],
+    "features": ["Quản lý tài liệu WIP", "Phê duyệt Shared", "Chữ ký số"]
+  },
+  "findings": [
+    {
+      "id": "ax1",
+      "axis": "Tech Mismatch",
+      "module": "Database",
+      "claim": "SRS ghi PostgreSQL nhưng Excel test Azure SQL Database",
+      "target_rule": "Tech Mismatch",
+      "quote": "PostgreSQL (Supabase)"
+    },
+    {
+      "id": "ax2",
+      "axis": "Feature Omission",
+      "module": "Chữ ký số",
+      "claim": "Chức năng chữ ký số trong SRS không có test case nào",
+      "target_rule": "Feature Omission"
+    }
+  ]
+}
+```''';
+
+      final result = AIService.parseGeneratorResultJson(rawJson);
+      expect(result.projectInfo.topic, 'CDE System for BIM Management');
+      expect(result.projectInfo.description, contains('quản lý môi trường dữ liệu chung'));
+      expect(result.projectInfo.techStack, containsAll(['Flutter', 'PostgreSQL', 'Supabase', 'Azure']));
+      expect(result.projectInfo.features.length, 3);
+      expect(result.hypotheses.length, 2);
+      expect(result.hypotheses.first.axis, 'Tech Mismatch');
+      expect(result.hypotheses.first.targetRule, 'Tech Mismatch');
+    });
+
+    test('filterVerifiedFindings retains 6-axis tags and blocks 100% fabricated quotes', () {
+      final hypotheses = [
+        const QualitativeHypothesis(
+          id: '1',
+          axis: 'Tech Mismatch',
+          module: 'Database',
+          claim: 'Mâu thuẫn cơ sở dữ liệu giữa SRS và Test Report',
+        ),
+        const QualitativeHypothesis(
+          id: '2',
+          axis: 'Logic Violation',
+          module: 'WIP Area',
+          claim: 'Quy tắc WIP cho phép PM can thiệp trái phép',
+        ),
+      ];
+
+      final rawVerdicts = [
+        {
+          'id': '1',
+          'is_verified': true,
+          'quote': 'Database: PostgreSQL (Supabase)',
+          'explanation': 'Khớp thật trong mục 2.3 của SRS',
+        },
+        {
+          'id': '2',
+          'is_verified': true,
+          'quote': 'PM has supreme privilege to wipe all files instantly without audit log',
+          'explanation': 'Quote bịa hoàn toàn không có trong tài liệu',
+        },
+      ];
+
+      final realDocText = [
+        'SRS Document: Database: PostgreSQL (Supabase) is selected for data persistence.',
+        'Test Report: Environment deployed on AWS EC2.',
+      ];
+
+      final verified = AIService.filterVerifiedFindings(
+        hypotheses: hypotheses,
+        rawVerdicts: rawVerdicts,
+        sourceTexts: realDocText,
+      );
+
+      expect(verified.length, 1);
+      expect(verified.first.id, '1');
+      expect(verified.first.axis, 'Tech Mismatch');
+      expect(verified.first.quote, 'Database: PostgreSQL (Supabase)');
+      // Quote bịa của ca #2 bị loại bỏ hoàn toàn
+      expect(verified.any((v) => v.id == '2'), isFalse);
+    });
   });
 }

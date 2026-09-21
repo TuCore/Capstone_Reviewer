@@ -52,21 +52,35 @@ class CoverageStats {
 }
 
 CoverageStats computeCoverage({
-  required String srsText,
+  String? srsText,
   required List<TestCaseRecord> records,
   required List<String> unknownModules,
+  List<String>? featureList,
 }) {
   final read = <String>[];
-  for (final line in srsText.split('\n')) {
-    final t = line.trim();
-    if (t.startsWith('## ') || t.startsWith('### ')) {
-      final name = t.replaceFirst(RegExp(r'^#+\s*'), '').trim();
-      if (name.isEmpty) continue;
-      if (unknownModules.contains(name)) continue;
-      read.add(name);
+  if (featureList != null && featureList.isNotEmpty) {
+    for (final f in featureList) {
+      final trimmed = f.trim();
+      if (trimmed.isNotEmpty && !read.contains(trimmed) && !unknownModules.contains(trimmed)) {
+        read.add(trimmed);
+      }
+    }
+  } else if (srsText != null && srsText.isNotEmpty) {
+    // Mechanical markdown section headings (0% regex keyword guessing)
+    for (final line in srsText.split('\n')) {
+      final t = line.trim();
+      if (t.startsWith('# ') ||
+          t.startsWith('## ') ||
+          t.startsWith('### ') ||
+          t.startsWith('#### ')) {
+        final name = t.replaceFirst(RegExp(r'^#+\s*'), '').trim();
+        if (name.isEmpty) continue;
+        if (unknownModules.contains(name)) continue;
+        if (_isGenericMetaHeading(name)) continue;
+        if (!read.contains(name)) read.add(name);
+      }
     }
   }
-
   final covered = <String>[];
   for (final uc in read) {
     if (records.any((r) => _covers(uc, r))) covered.add(uc);
@@ -161,4 +175,39 @@ String classifyGapTaxonomy(String description) {
     return 'Unhappy case';
   }
   return 'Happy case';
+}
+
+bool _isGenericMetaHeading(String name) {
+  final lower = name.toLowerCase().trim();
+  const stopWords = {
+    'from',
+    'to',
+    'and',
+    'or',
+    'the',
+    'in',
+    'on',
+    'at',
+    'for',
+    'with',
+    'by',
+    'of',
+    'an',
+    'a',
+    'n/a',
+    'none',
+  };
+  if (stopWords.contains(lower)) return true;
+
+  return lower.contains('record of changes') ||
+      lower.contains('lịch sử thay đổi') ||
+      lower.contains('mục lục') ||
+      lower.contains('table of contents') ||
+      lower.contains('thông tin bìa') ||
+      lower.contains('scope of testing') ||
+      lower.contains('test strategy') ||
+      lower.contains('test plan') ||
+      lower.contains('human resources') ||
+      lower.contains('test environment') ||
+      lower.contains('test milestones');
 }

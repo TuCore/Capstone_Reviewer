@@ -1,200 +1,9 @@
 import '../extraction/test_case_schema.dart';
+import '../extraction/workbook_snapshot.dart';
+import 'cross_check_models.dart';
 import 'hard_checks.dart';
 
-class DuplicateIdFinding {
-  const DuplicateIdFinding({
-    required this.testId,
-    required this.sheets,
-    required this.statusBySheet,
-    required this.hasStatusConflict,
-    required this.message,
-  });
-
-  final String testId;
-  final List<String> sheets;
-  final Map<String, String> statusBySheet;
-  final bool hasStatusConflict;
-  final String message;
-}
-
-class ThreeWayMetricsComparison {
-  const ThreeWayMetricsComparison({
-    required this.wordTotal,
-    required this.wordAuto,
-    required this.wordManual,
-    required this.wordFailed,
-    required this.excelDeclaredTotal,
-    required this.excelDeclaredPassed,
-    required this.excelDeclaredFailed,
-    required this.actualTotal,
-    required this.actualPassed,
-    required this.actualFailed,
-    required this.actualManual,
-    required this.actualAuto,
-    required this.totalDiscrepancy,
-    required this.concealedFails,
-    required this.manualDiscrepancy,
-    required this.findings,
-  });
-
-  final int wordTotal;
-  final int wordAuto;
-  final int wordManual;
-  final int wordFailed;
-
-  final int excelDeclaredTotal;
-  final int excelDeclaredPassed;
-  final int excelDeclaredFailed;
-
-  final int actualTotal;
-  final int actualPassed;
-  final int actualFailed;
-  final int actualManual;
-  final int actualAuto;
-
-  final int totalDiscrepancy;
-  final int concealedFails;
-  final int manualDiscrepancy;
-  final List<String> findings;
-}
-
-class EnvironmentMismatchFinding {
-  const EnvironmentMismatchFinding({
-    required this.category,
-    required this.wordValue,
-    required this.excelValue,
-    this.registrationValue,
-    required this.description,
-  });
-
-  final String category;
-  final String wordValue;
-  final String excelValue;
-  final String? registrationValue;
-  final String description;
-}
-
-class TimelineConflictFinding {
-  const TimelineConflictFinding({
-    required this.milestoneName,
-    required this.milestoneDeadline,
-    required this.testExecutionDate,
-    required this.isViolated,
-    required this.description,
-  });
-
-  final String milestoneName;
-  final String milestoneDeadline;
-  final String testExecutionDate;
-  final bool isViolated;
-  final String description;
-}
-
-class IntegrityFinding {
-  const IntegrityFinding({
-    required this.code,
-    required this.severity,
-    required this.location,
-    required this.message,
-  });
-
-  final String code;
-  final String severity; // CRITICAL, HIGH, MEDIUM, LOW
-  final String location;
-  final String message;
-}
-
-class CrossCheckResult {
-  const CrossCheckResult({
-    required this.duplicateIds,
-    required this.metricsComparison,
-    required this.environmentMismatches,
-    required this.timelineConflicts,
-    required this.integrityFindings,
-  });
-
-  final List<DuplicateIdFinding> duplicateIds;
-  final ThreeWayMetricsComparison metricsComparison;
-  final List<EnvironmentMismatchFinding> environmentMismatches;
-  final List<TimelineConflictFinding> timelineConflicts;
-  final List<IntegrityFinding> integrityFindings;
-
-  String toMarkdown() {
-    final buf = StringBuffer();
-
-    buf.writeln('## 🏛️ KẾT QUẢ ĐỐI CHIẾU SỐ HỌC & TÍNH NHẤT QUÁN (DETERMINISTIC CODE ENGINE)');
-    buf.writeln('*Toàn bộ kết quả tính toán 100% bằng code thuần, không qua AI, đảm bảo độ chính xác tuyệt đối.*\n');
-
-    buf.writeln('### 1. Bảng Đối Chiếu Số Liệu 3 Nguồn (Word vs Excel vs Thực Tế)');
-    buf.writeln('| Tiêu chí | Word (Report5 §5.2) | Excel (Test Statistics) | Đếm Thực Tế (M01-M10) | Sai lệch & Nhận định |');
-    buf.writeln('| :--- | :--- | :--- | :--- | :--- |');
-
-    final totalDiff = metricsComparison.actualTotal - metricsComparison.wordTotal;
-    final totalNote = totalDiff != 0
-        ? 'Lệch $totalDiff ca (${metricsComparison.wordTotal} vs ${metricsComparison.actualTotal})'
-        : 'Khớp';
-    buf.writeln('| **Tổng số ca test** | ${metricsComparison.wordTotal} | ${metricsComparison.excelDeclaredTotal} | ${metricsComparison.actualTotal} | $totalNote |');
-
-    buf.writeln('| **Số ca Passed** | ${metricsComparison.wordAuto + metricsComparison.wordManual} (100%) | ${metricsComparison.excelDeclaredPassed} (100%) | ${metricsComparison.actualPassed} (${(metricsComparison.actualPassed * 100 / (metricsComparison.actualTotal == 0 ? 1 : metricsComparison.actualTotal)).toStringAsFixed(1)}%) | Thực tế chỉ đạt ${(metricsComparison.actualPassed * 100 / (metricsComparison.actualTotal == 0 ? 1 : metricsComparison.actualTotal)).toStringAsFixed(1)}% |');
-
-    final failNote = metricsComparison.concealedFails > 0
-        ? '🚨 Khai báo 0 Fail nhưng đếm thật có ${metricsComparison.actualFailed} ca FAILED!'
-        : 'Khớp (0 ca Fail)';
-    buf.writeln('| **Số ca Failed** | ${metricsComparison.wordFailed} | ${metricsComparison.excelDeclaredFailed} | ${metricsComparison.actualFailed} | $failNote |');
-
-    final manualNote = metricsComparison.manualDiscrepancy != 0
-        ? 'Khai báo ${metricsComparison.wordManual} Manual, thực tế ${metricsComparison.actualManual} Manual (lệch ${metricsComparison.manualDiscrepancy} ca)'
-        : 'Khớp';
-    buf.writeln('| **Phân loại Manual/Auto** | ${metricsComparison.wordManual} Manual / ${metricsComparison.wordAuto} Auto | Khai báo 100% Pass | ${metricsComparison.actualManual} Manual / ${metricsComparison.actualAuto} Auto | $manualNote |');
-
-    if (metricsComparison.findings.isNotEmpty) {
-      buf.writeln('\n**Chi tiết phát hiện số học:**');
-      for (final f in metricsComparison.findings) {
-        buf.writeln('- $f');
-      }
-    }
-
-    buf.writeln('\n### 2. Quét Trùng Lặp ID & Mâu Thuẫn Pass/Fail Liên Sheet');
-    if (duplicateIds.isEmpty) {
-      buf.writeln('Không phát hiện trùng lặp ID liên sheet.');
-    } else {
-      buf.writeln('| Test Case ID | Các Sheet Xuất Hiện | Kết Quả Từng Sheet | Mâu thuẫn Pass/Fail |');
-      buf.writeln('| :--- | :--- | :--- | :--- |');
-      for (final d in duplicateIds) {
-        final occurrences = d.statusBySheet.entries.map((e) => '${e.key}: **${e.value}**').join('<br>');
-        final conflict = d.hasStatusConflict
-            ? '🚨 **CÓ MÂU THUẪN** (Vừa Pass vừa Fail)'
-            : 'Đồng nhất';
-        buf.writeln('| `${d.testId}` | ${d.sheets.join(', ')} | $occurrences | $conflict |');
-      }
-    }
-
-    buf.writeln('\n### 3. Đối Chiếu Môi Trường & Tiến Độ');
-    if (environmentMismatches.isEmpty && timelineConflicts.isEmpty) {
-      buf.writeln('Môi trường và tiến độ đồng nhất giữa các tài liệu.');
-    } else {
-      for (final env in environmentMismatches) {
-        buf.writeln('- ⚠️ **Lệch ${env.category}**: Word ghi `${env.wordValue}` vs Excel ghi `${env.excelValue}`'
-            '${env.registrationValue != null ? ' vs Phiếu đăng ký ghi `${env.registrationValue}`.' : '.'}');
-      }
-      for (final time in timelineConflicts) {
-        if (time.isViolated) {
-          buf.writeln('- 🚨 **Lệch tiến độ (${time.milestoneName})**: ${time.description}');
-        }
-      }
-    }
-
-    if (integrityFindings.isNotEmpty) {
-      buf.writeln('\n### 4. Lỗi Toàn Vẹn Dữ Liệu & Hành Chính');
-      for (final item in integrityFindings) {
-        final icon = item.severity == 'CRITICAL' ? '🚨' : (item.severity == 'HIGH' ? '⚠️' : 'ℹ️');
-        buf.writeln('- $icon **[${item.severity}] ${item.location}**: ${item.message}');
-      }
-    }
-
-    return buf.toString();
-  }
-}
+export 'cross_check_models.dart';
 
 class CrossCheckEngine {
   /// 1. Quét trùng lặp Test Case ID giữa các sheet & mâu thuẫn trạng thái
@@ -203,21 +12,21 @@ class CrossCheckEngine {
     final idMap = <String, List<TestCaseRecord>>{};
 
     for (final r in records) {
-      final id = r.id.trim();
-      if (id.isEmpty) continue;
-      idMap.putIfAbsent(id, () => []).add(r);
+      final key = r.canonicalId.isNotEmpty ? r.canonicalId : normalizeCode(r.id);
+      if (key.isEmpty) continue;
+      idMap.putIfAbsent(key, () => []).add(r);
     }
 
     for (final entry in idMap.entries) {
-      final list = entry.value;
-      final distinctSheets = list.map((r) => r.sheet).toSet().toList();
+      final distinctSheets = entry.value.map((r) => r.sheet).toSet().toList();
       if (distinctSheets.length > 1) {
         final statusBySheet = <String, String>{};
-        for (final r in list) {
+        for (final r in entry.value) {
           statusBySheet[r.sheet] = normalizeStatus(r.status);
         }
-        final statuses = statusBySheet.values.toSet();
-        final hasConflict = statuses.contains('PASSED') && statuses.contains('FAILED');
+
+        final distinctStatuses = statusBySheet.values.toSet();
+        final hasConflict = distinctStatuses.contains('PASSED') && distinctStatuses.contains('FAILED');
 
         final msg = hasConflict
             ? 'Ca kiểm thử ${entry.key} bị trùng lặp giữa các sheet ${distinctSheets.join(', ')} và CÓ MÂU THUẪN KẾT QUẢ (${statusBySheet.entries.map((e) => '${e.key}=${e.value}').join(', ')}).'
@@ -229,6 +38,12 @@ class CrossCheckEngine {
           statusBySheet: statusBySheet,
           hasStatusConflict: hasConflict,
           message: msg,
+          evidence: SourceEvidence(
+            locator: distinctSheets.join(', '),
+            header: 'Test Case ID',
+            value: entry.key,
+            rule: 'duplicate-id',
+          ),
         ));
       }
     }
@@ -241,91 +56,98 @@ class CrossCheckEngine {
     required List<TestCaseRecord> records,
     String? wordText,
     String? excelText,
-    Map<String, List<List<String>>>? rawSheets,
+    WorkbookSnapshot? workbook,
+    ExtractionAvailability availability = const ExtractionAvailability.complete(),
   }) {
-    // Trích xuất từ Word (mục 5.2 System Testing E2E Statistics)
-    var wordTotal = 0;
-    var wordAuto = 0;
-    var wordManual = 0;
-    var wordFailed = 0;
+    MetricValue<int> wordTotal = const MetricValue.unavailable(reason: 'Không tìm thấy thông tin tổng ca kiểm thử trong SRS/Word');
+    MetricValue<int> wordAuto = const MetricValue.unavailable(reason: 'Không tìm thấy số ca tự động trong SRS/Word');
+    MetricValue<int> wordManual = const MetricValue.unavailable(reason: 'Không tìm thấy số ca thủ công trong SRS/Word');
+    MetricValue<int> wordFailed = const MetricValue.unavailable(reason: 'Không tìm thấy số ca thất bại trong SRS/Word');
 
     if (wordText != null && wordText.isNotEmpty) {
-      final totalMatch = RegExp(r'Total(?:\s+E2E)?\s+Test\s+Cases\s*:\s*(\d+)', caseSensitive: false).firstMatch(wordText);
-      if (totalMatch != null) wordTotal = int.tryParse(totalMatch.group(1)!) ?? 0;
+      final totalMatch = RegExp(r'(?:total|tổng\s+số)(?:\s+e2e)?\s+test\s+cases?\s*:\s*(\d+)', caseSensitive: false).firstMatch(wordText);
+      if (totalMatch != null) {
+        final val = int.tryParse(totalMatch.group(1)!);
+        if (val != null) wordTotal = MetricValue.available(val, evidence: SourceEvidence(locator: 'Word', value: '$val'));
+      }
 
-      final autoMatch = RegExp(r'Automated\s+Passed\s*:\s*(\d+)', caseSensitive: false).firstMatch(wordText);
-      if (autoMatch != null) wordAuto = int.tryParse(autoMatch.group(1)!) ?? 0;
+      final autoMatch = RegExp(r'(?:automated|tự\s+động)\s*(?:passed|đạt)?\s*:\s*(\d+)', caseSensitive: false).firstMatch(wordText);
+      if (autoMatch != null) {
+        final val = int.tryParse(autoMatch.group(1)!);
+        if (val != null) wordAuto = MetricValue.available(val, evidence: SourceEvidence(locator: 'Word', value: '$val'));
+      }
 
-      final manualMatch = RegExp(r'Manual\s+(?:Executed\s*)?(?:\([^\)]*\)\s*)?:\s*(\d+)', caseSensitive: false).firstMatch(wordText);
-      if (manualMatch != null) wordManual = int.tryParse(manualMatch.group(1)!) ?? 0;
+      final manualMatch = RegExp(r'(?:manual|thủ\s+công)\s*(?:executed)?\s*:\s*(\d+)', caseSensitive: false).firstMatch(wordText);
+      if (manualMatch != null) {
+        final val = int.tryParse(manualMatch.group(1)!);
+        if (val != null) wordManual = MetricValue.available(val, evidence: SourceEvidence(locator: 'Word', value: '$val'));
+      }
 
-      final failMatch = RegExp(r'Failed/(?:Blocked|Error)\s*:\s*(\d+)', caseSensitive: false).firstMatch(wordText);
-      if (failMatch != null) wordFailed = int.tryParse(failMatch.group(1)!) ?? 0;
+      final failMatch = RegExp(r'(?:failed|thất\s+bại|lỗi)(?:[/\s]+(?:blocked|error))?\s*:\s*(\d+)', caseSensitive: false).firstMatch(wordText);
+      if (failMatch != null) {
+        final val = int.tryParse(failMatch.group(1)!);
+        if (val != null) wordFailed = MetricValue.available(val, evidence: SourceEvidence(locator: 'Word', value: '$val'));
+      }
     }
 
-    // Default nếu Word không có hoặc parse ra 0 nhưng có text
-    if (wordTotal == 0 && wordText != null && wordText.contains('320')) {
-      wordTotal = 320;
-      wordAuto = 267;
-      wordManual = 53;
-      wordFailed = 0;
-    }
+    // Trích xuất từ Excel (sheet thống kê)
+    MetricValue<int> excelDeclaredTotal = const MetricValue.unavailable(reason: 'Không tìm thấy bảng thống kê khai báo trong Excel');
+    MetricValue<int> excelDeclaredPassed = const MetricValue.unavailable(reason: 'Không tìm thấy số ca Pass khai báo trong Excel');
+    MetricValue<int> excelDeclaredFailed = const MetricValue.unavailable(reason: 'Không tìm thấy số ca Fail khai báo trong Excel');
 
-    // Trích xuất từ Excel (sheet Test Statistics)
-    var excelDeclaredTotal = 0;
-    var excelDeclaredPassed = 0;
-    var excelDeclaredFailed = 0;
-
-    final statsSheet = rawSheets?['Test Statistics'];
-    if (statsSheet != null) {
-      for (final row in statsSheet) {
-        final joined = row.join(' ').toLowerCase();
-        if (joined.contains('sub total') || joined.contains('total')) {
-          for (final cell in row) {
-            final val = int.tryParse(cell.trim());
-            if (val != null && val > 50 && excelDeclaredTotal == 0) {
-              excelDeclaredTotal = val;
+    if (workbook != null) {
+      final statsSheet = workbook.sheetNamed('Test Statistics') ?? workbook.sheetNamed('Statistics') ?? workbook.sheetNamed('Thống kê');
+      if (statsSheet != null) {
+        for (final row in statsSheet.rows) {
+          final textList = row.toTextList();
+          final joined = textList.join(' ').toLowerCase();
+          if (joined.contains('sub total') || joined.contains('total') || joined.contains('tổng')) {
+            for (final cell in row.cells) {
+              final val = int.tryParse(cell.text.trim());
+              if (val != null && val > 0 && !excelDeclaredTotal.isAvailable) {
+                excelDeclaredTotal = MetricValue.available(
+                  val,
+                  evidence: SourceEvidence(locator: '${statsSheet.name}!${cell.address}', value: '$val'),
+                );
+              }
             }
           }
         }
       }
     }
 
-    if (excelDeclaredTotal == 0) {
-      // Nếu là formula SUM(D11:D20) như trong Report5, tổng là 338
-      if (rawSheets != null && rawSheets.containsKey('M01_Authentication') && rawSheets.containsKey('M10_System_Settings')) {
-        excelDeclaredTotal = 338;
-        excelDeclaredPassed = 338;
-        excelDeclaredFailed = 0;
-      } else {
-        excelDeclaredTotal = records.length;
-        excelDeclaredPassed = records.where((r) => normalizeStatus(r.status) == 'PASSED').length;
-        excelDeclaredFailed = records.where((r) => normalizeStatus(r.status) == 'FAILED').length;
-      }
-    }
-
     // Đếm thực tế từ danh sách records
-    final actualTotal = records.length;
-    final actualPassed = records.where((r) => normalizeStatus(r.status) == 'PASSED').length;
-    final actualFailed = records.where((r) => normalizeStatus(r.status) == 'FAILED').length;
+    final actualTotal = availability.isComplete
+        ? MetricValue.available(records.length)
+        : MetricValue.partial(records.length, reason: 'Dữ liệu bán phần do tài liệu bị cắt bớt');
 
-    // Phân loại manual vs auto: Nếu Word khai báo 267 Auto thì số còn lại thực tế trong Excel là Manual
-    final actualAuto = wordAuto > 0 && actualTotal >= wordAuto ? wordAuto : (actualTotal - wordManual > 0 ? actualTotal - wordManual : 0);
-    final actualManual = actualTotal - actualAuto;
+    final passCount = records.where((r) => normalizeStatus(r.status) == 'PASSED').length;
+    final failCount = records.where((r) => normalizeStatus(r.status) == 'FAILED').length;
 
-    final totalDiscrepancy = actualTotal - (wordTotal > 0 ? wordTotal : actualTotal);
-    final concealedFails = actualFailed - wordFailed;
-    final manualDiscrepancy = actualManual - (wordManual > 0 ? wordManual : actualManual);
+    final actualPassed = availability.isComplete
+        ? MetricValue.available(passCount)
+        : MetricValue.partial(passCount, reason: 'Dữ liệu bán phần');
+
+    final actualFailed = availability.isComplete
+        ? MetricValue.available(failCount)
+        : MetricValue.partial(failCount, reason: 'Dữ liệu bán phần');
+
+    // Không tự suy đoán actual manual/auto từ Word nếu không có dữ liệu kiểm thử
+    const actualManual = MetricValue<int>.unavailable(reason: 'Excel không có cột phân loại Manual/Auto riêng biệt');
+    const actualAuto = MetricValue<int>.unavailable(reason: 'Excel không có cột phân loại Manual/Auto riêng biệt');
+
+    final totalDiscrepancy = MetricValue.diff(actualTotal, wordTotal);
+    final concealedFails = (actualFailed.isAvailable && wordFailed.isAvailable)
+        ? MetricValue.available((actualFailed.value! - (wordFailed.value ?? 0)))
+        : const MetricValue<int>.unavailable();
+    final manualDiscrepancy = MetricValue.diff(actualManual, wordManual);
 
     final findings = <String>[];
-    if (totalDiscrepancy != 0) {
-      findings.add('Lệch $totalDiscrepancy ca kiểm thử giữa Word ($wordTotal ca) và thực tế ($actualTotal ca). Cụ thể thiếu 18 ca ở M04 (BIM 3D Viewer).');
+    if (totalDiscrepancy.isAvailable && totalDiscrepancy.value != 0) {
+      findings.add('Lệch ${totalDiscrepancy.value} ca kiểm thử giữa SRS (${wordTotal.value} ca) và đếm thực tế (${actualTotal.value} ca).');
     }
-    if (concealedFails > 0) {
-      findings.add('Báo cáo khai báo 0 Fail (100% Pass) nhưng thực tế có $actualFailed ca FAILED chưa được khắc phục!');
-    }
-    if (manualDiscrepancy != 0) {
-      findings.add('Word khai báo $wordManual ca Manual, nhưng thực tế có $actualManual ca Manual (lệch $manualDiscrepancy ca).');
+    if (concealedFails.isAvailable && concealedFails.value! > 0 && actualFailed.value! > (wordFailed.value ?? 0)) {
+      findings.add('Báo cáo khai báo ${wordFailed.value ?? 0} ca Fail nhưng thực tế có ${actualFailed.value} ca FAILED.');
     }
 
     return ThreeWayMetricsComparison(
@@ -333,8 +155,8 @@ class CrossCheckEngine {
       wordAuto: wordAuto,
       wordManual: wordManual,
       wordFailed: wordFailed,
-      excelDeclaredTotal: excelDeclaredTotal > 0 ? excelDeclaredTotal : actualTotal,
-      excelDeclaredPassed: excelDeclaredPassed > 0 ? excelDeclaredPassed : actualTotal,
+      excelDeclaredTotal: excelDeclaredTotal,
+      excelDeclaredPassed: excelDeclaredPassed,
       excelDeclaredFailed: excelDeclaredFailed,
       actualTotal: actualTotal,
       actualPassed: actualPassed,
@@ -349,105 +171,71 @@ class CrossCheckEngine {
   }
 
   /// 3. Soi lệch môi trường kiểm thử (Database, Hosting)
+  ///
+  /// Toàn bộ việc đọc hiểu ngữ nghĩa công nghệ & CSDL đã được chuyển sang
+  /// AI Pass 1 (Trục 1: Tech Mismatch) & Pass 2 (Verifier).
+  /// Dart thuần túy không dùng regex đoán từ khóa để tránh cảnh báo giả.
   static List<EnvironmentMismatchFinding> checkEnvironmentMismatch({
     String? wordText,
     String? excelText,
     String? registrationText,
-    Map<String, List<List<String>>>? rawSheets,
+    WorkbookSnapshot? workbook,
   }) {
-    final findings = <EnvironmentMismatchFinding>[];
-
-    final fullWord = (wordText ?? '').toLowerCase();
-    final fullExcel = (excelText ?? '').toLowerCase();
-    final fullReg = (registrationText ?? '').toLowerCase();
-
-    // Kiểm tra Database
-    String? wordDb;
-    if (fullWord.contains('postgresql') || fullWord.contains('supabase')) {
-      wordDb = 'PostgreSQL (Supabase)';
-    }
-
-    String? excelDb;
-    final tcIndex = rawSheets?['Test Cases'];
-    if (tcIndex != null) {
-      for (final row in tcIndex) {
-        final text = row.join(' ').toLowerCase();
-        if (text.contains('azure sql')) {
-          excelDb = 'Azure SQL Database';
-          break;
-        }
-      }
-    }
-    if (excelDb == null && fullExcel.contains('azure sql')) {
-      excelDb = 'Azure SQL Database';
-    }
-
-    String? regDb;
-    if (fullReg.contains('viettel') || fullReg.contains('cloud')) {
-      regDb = 'Viettel Cloud (Private Server)';
-    }
-
-    if (wordDb != null && excelDb != null && wordDb != excelDb) {
-      findings.add(EnvironmentMismatchFinding(
-        category: 'Hệ Quản Trị Cơ Sở Dữ Liệu (Database)',
-        wordValue: wordDb,
-        excelValue: excelDb,
-        registrationValue: regDb,
-        description: 'Mâu thuẫn kiến trúc: Word báo cáo dùng $wordDb, nhưng Excel Test Report lại thiết lập môi trường $excelDb'
-            '${regDb != null ? ', trong khi Phiếu đăng ký ghi nhận hạ tầng $regDb.' : '.'}',
-      ));
-    }
-
-    return findings;
+    return const [];
   }
 
   /// 4. Soi lệch tiến độ (Milestone Deadline vs Test Execution Date)
   static List<TimelineConflictFinding> checkMilestoneDelay({
     String? wordText,
     String? excelText,
-    Map<String, List<List<String>>>? rawSheets,
+    WorkbookSnapshot? workbook,
   }) {
     final findings = <TimelineConflictFinding>[];
 
-    final fullWord = wordText ?? '';
-    final fullExcel = excelText ?? '';
-
-    // Tìm deadline Final Approval trong Word (ví dụ 10/08/2026)
-    var approvalDeadline = '';
-    final milestoneMatch = RegExp(r'Final\s+Test\s+Report\s+Approval\s*\|\s*[0-9/]+\s*\|\s*([0-9/]+)', caseSensitive: false).firstMatch(fullWord);
-    if (milestoneMatch != null) {
-      approvalDeadline = milestoneMatch.group(1)!;
-    } else if (fullWord.contains('10/08/2026') || fullWord.contains('10/08')) {
-      approvalDeadline = '10/08/2026';
+    // Tìm deadline trong Word từ nhãn cụ thể
+    String? approvalDeadline;
+    if (wordText != null) {
+      final m = RegExp(r'(?:final\s+test\s+report\s+approval|phê\s+duyệt\s+báo\s+cáo|hạn\s+chót\s+kiểm\s+thử)\s*[:|]\s*([0-9/\-]+)', caseSensitive: false).firstMatch(wordText);
+      if (m != null) approvalDeadline = m.group(1)!.trim();
     }
 
-    // Tìm ngày thực hiện test trong Excel (Sheet Cover revision history)
-    var testDate = '';
-    final cover = rawSheets?['Cover'];
-    if (cover != null) {
-      for (final row in cover) {
-        final joined = row.join(' ');
-        if (joined.contains('2026-08-21') || joined.contains('21/08/2026')) {
-          testDate = '21/08/2026';
-          break;
+    // Tìm ngày thực hiện kiểm thử trong Excel từ nhãn cụ thể
+    String? testDate;
+    if (workbook != null) {
+      final cover = workbook.sheetNamed('Cover') ?? workbook.sheetNamed('Revision History');
+      if (cover != null) {
+        for (final row in cover.rows) {
+          for (var c = 0; c < row.cells.length - 1; c++) {
+            final cellText = row.cells[c].text.toLowerCase().trim();
+            if (cellText.contains('test date') || cellText.contains('execution date') || cellText.contains('ngày kiểm thử')) {
+              final nextVal = row.cells[c + 1].text.trim();
+              if (nextVal.isNotEmpty) {
+                testDate = nextVal;
+                break;
+              }
+            }
+          }
+          if (testDate != null) break;
         }
       }
     }
-    if (testDate.isEmpty && (fullExcel.contains('2026-08-21') || fullExcel.contains('21/08/2026'))) {
-      testDate = '21/08/2026';
-    }
 
-    if (approvalDeadline.isNotEmpty && testDate.isNotEmpty) {
-      final dDeadline = _parseDate(approvalDeadline);
-      final dTest = _parseDate(testDate);
-      final isDelay = (dDeadline != null && dTest != null) ? dTest.isAfter(dDeadline) : true;
-      if (isDelay) {
+    if (approvalDeadline != null && testDate != null) {
+      final dDeadline = _parseDateStrict(approvalDeadline);
+      final dTest = _parseDateStrict(testDate);
+      if (dDeadline != null && dTest != null && dTest.isAfter(dDeadline)) {
         findings.add(TimelineConflictFinding(
-          milestoneName: 'Final Test Report Approval',
+          milestoneName: 'Phê duyệt Báo cáo kiểm thử',
           milestoneDeadline: approvalDeadline,
           testExecutionDate: testDate,
           isViolated: true,
-          description: 'Ca kiểm thử được cập nhật/thực hiện đến ngày $testDate, trễ hơn hạn chót phê duyệt đồ án $approvalDeadline trong Test Plan.',
+          description: 'Ca kiểm thử được thực hiện đến ngày $testDate, trễ hơn hạn chót phê duyệt $approvalDeadline trong kế hoạch kiểm thử.',
+          evidence: SourceEvidence(
+            locator: 'SRS vs Cover',
+            header: 'Timeline',
+            value: '$testDate > $approvalDeadline',
+            rule: 'timeline-conflict',
+          ),
         ));
       }
     }
@@ -460,7 +248,7 @@ class CrossCheckEngine {
     required List<TestCaseRecord> records,
     String? wordText,
     String? excelText,
-    Map<String, List<List<String>>>? rawSheets,
+    WorkbookSnapshot? workbook,
   }) {
     final findings = <IntegrityFinding>[];
 
@@ -483,110 +271,100 @@ class CrossCheckEngine {
           severity: 'HIGH',
           location: 'Tài liệu / Bìa',
           message: 'Sót placeholder mẫu chưa điền thông tin thật: "$p".',
+          evidence: SourceEvidence(
+            locator: 'Văn bản',
+            value: p,
+            rule: 'placeholder-leftover',
+          ),
         ));
       }
     }
 
-    // 2. Bắt dán nhầm mô tả yêu cầu giữa M09 và M08
-    final m08Sheet = rawSheets?['M08_Dashboard_Reports'];
-    final m09Sheet = rawSheets?['M09_User_Role_Permissions'];
-    if (m08Sheet != null && m09Sheet != null) {
-      String? m08Req;
-      String? m09Req;
-      for (final r in m08Sheet) {
-        if (r.length > 1 && r[0].toLowerCase().contains('test requirement')) {
-          m08Req = r[1];
-          break;
-        }
-      }
-      for (final r in m09Sheet) {
-        if (r.length > 1 && r[0].toLowerCase().contains('test requirement')) {
-          m09Req = r[1];
-          break;
-        }
-      }
-      if (m08Req != null && m09Req != null && m08Req.trim() == m09Req.trim()) {
-        findings.add(IntegrityFinding(
-          code: 'copy-paste-requirement',
-          severity: 'HIGH',
-          location: 'Sheet M09_User_Role_Permissions',
-          message: 'Lỗi copy-paste: Mô tả yêu cầu của M09 (User Role & Permissions) bị dán nhầm y hệt mô tả của M08 (Dashboard & Reports): "${m09Req.trim()}".',
-        ));
-      }
-    }
+    // 2. Bắt gãy liên kết sheet trong mục lục Test Cases (dựa trên cột Tên Sheet chuẩn hóa)
+    if (workbook != null) {
+      final tcSheet = workbook.sheetNamed('Test Cases') ?? workbook.sheetNamed('TOC') ?? workbook.sheetNamed('Mục lục');
+      if (tcSheet != null) {
+        int? sheetColIdx;
+        String? sheetColHeader;
+        int headerRowIdx = -1;
 
-    // 3. So khớp ngày bìa vs ngày lịch sử sửa đổi trong Cover
-    final cover = rawSheets?['Cover'];
-    if (cover != null) {
-      String? issueDate;
-      String? lastRevDate;
-      for (final row in cover) {
-        final joined = row.join(' ');
-        if (joined.contains('Issue Date') && joined.contains('2026-07-23')) {
-          issueDate = '23/07/2026';
+        // Tìm dòng tiêu đề có cột tên sheet
+        for (final row in tcSheet.rows) {
+          for (var c = 0; c < row.cells.length; c++) {
+            final text = foldHeader(row.cells[c].text);
+            if (text == 'sheet name' || text == 'ten sheet' || text == 'worksheet' || text == 'tab') {
+              sheetColIdx = c;
+              sheetColHeader = row.cells[c].text;
+              headerRowIdx = row.rowIndex;
+              break;
+            }
+          }
+          if (sheetColIdx != null) break;
         }
-        if (joined.contains('2026-08-21')) {
-          lastRevDate = '21/08/2026';
-        }
-      }
-      if (issueDate != null && lastRevDate != null && issueDate != lastRevDate) {
-        findings.add(IntegrityFinding(
-          code: 'cover-date-mismatch',
-          severity: 'MEDIUM',
-          location: 'Sheet Cover',
-          message: 'Ngày phát hành ghi trên bìa ($issueDate) lệch gần 1 tháng so với ngày chốt phiên bản v1.0 trong bảng Revision History ($lastRevDate).',
-        ));
-      }
-    }
 
-    // 4. Bắt gãy liên kết sheet trong mục lục Test Cases
-    final tcIndex = rawSheets?['Test Cases'];
-    if (tcIndex != null && rawSheets != null) {
-      final actualSheets = rawSheets.keys.toSet();
-      for (var i = 1; i < tcIndex.length; i++) {
-        final row = tcIndex[i];
-        if (row.length > 2) {
-          final targetSheet = row[2].trim();
-          if (targetSheet.isNotEmpty &&
-              targetSheet.toLowerCase() != 'sheet name' &&
-              !actualSheets.contains(targetSheet)) {
-            findings.add(IntegrityFinding(
-              code: 'broken-sheet-link',
-              severity: 'HIGH',
-              location: 'Mục lục Test Cases',
-              message: 'Gãy liên kết sheet: Dòng mục lục trỏ đến sheet "$targetSheet" nhưng sheet này không tồn tại trong file Excel.',
-            ));
+        // Chỉ kiểm tra khi có cột Tên Sheet rõ ràng; TUYỆT ĐỐI không lấy cứng cột 3
+        if (sheetColIdx != null) {
+          for (final row in tcSheet.rows) {
+            if (row.rowIndex <= headerRowIdx) continue;
+            final cell = row.cell(sheetColIdx);
+            if (cell == null || cell.isEmpty) continue;
+
+            final targetSheet = cell.text.trim();
+            if (targetSheet.isEmpty) continue;
+
+            if (!workbook.containsSheet(targetSheet)) {
+              findings.add(IntegrityFinding(
+                code: 'broken-sheet-link',
+                severity: 'HIGH',
+                location: 'Mục lục (${tcSheet.name}!${cell.address})',
+                message: 'Gãy liên kết sheet: Dòng mục lục trỏ đến sheet "$targetSheet" nhưng sheet này không tồn tại trong file Excel.',
+                evidence: SourceEvidence(
+                  locator: '${tcSheet.name}!${cell.address}',
+                  header: sheetColHeader,
+                  value: targetSheet,
+                  rule: 'broken-sheet-link',
+                ),
+              ));
+            }
           }
         }
       }
     }
 
-    // 5. Kiểm tra quy tắc nghiệp vụ WIP Isolation & Published Integrity
+    // 3. Kiểm tra quy tắc nghiệp vụ WIP Isolation & Published Integrity khi có bằng chứng trong dữ liệu
     for (final r in records) {
       final desc = r.description.toLowerCase();
       final steps = r.steps.toLowerCase();
       final expected = r.expected.toLowerCase();
       final combined = '$desc $steps $expected';
 
-      // Rule: PM can thiệp xóa/sửa file trong WIP
-      if (r.id.contains('TC-DOC') && (combined.contains('delete') || combined.contains('xóa')) && combined.contains('wip')) {
-        if (!combined.contains('creator only') && !combined.contains('reject') && !combined.contains('error')) {
+      if (combined.contains('wip') && (combined.contains('delete') || combined.contains('xóa'))) {
+        if (!combined.contains('creator only') && !combined.contains('reject') && !combined.contains('error') && !combined.contains('bị từ chối')) {
           findings.add(IntegrityFinding(
             code: 'wip-isolation-violation',
             severity: 'HIGH',
             location: '${r.sheet} (${r.id})',
             message: 'Vi phạm nguyên tắc WIP Isolation: Cho phép chỉnh sửa/xóa tài liệu WIP mà không kiểm tra quyền tác giả duy nhất.',
+            evidence: SourceEvidence(
+              locator: '${r.sheet}!${r.id}',
+              value: r.description,
+              rule: 'wip-isolation-violation',
+            ),
           ));
         }
       }
 
-      // Rule: Published documents being modified/renamed
-      if (r.id.contains('TC-DOC') && combined.contains('published') && (combined.contains('modify') || combined.contains('rename') || combined.contains('delete'))) {
+      if (combined.contains('published') && (combined.contains('modify') || combined.contains('rename') || combined.contains('delete') || combined.contains('sửa'))) {
         findings.add(IntegrityFinding(
           code: 'published-integrity-violation',
           severity: 'CRITICAL',
           location: '${r.sheet} (${r.id})',
-          message: 'Vi phạm tính toàn vẹn Published: Tài liệu đã ban hành (Published) không được phép sửa đổi/xóa trực tiếp mà phải qua quy trình Revision/Addendum.',
+          message: 'Vi phạm tính toàn vẹn Published: Tài liệu đã ban hành (Published) không được phép sửa đổi/xóa trực tiếp.',
+          evidence: SourceEvidence(
+            locator: '${r.sheet}!${r.id}',
+            value: r.description,
+            rule: 'published-integrity-violation',
+          ),
         ));
       }
     }
@@ -600,32 +378,70 @@ class CrossCheckEngine {
     String? wordText,
     String? excelText,
     String? registrationText,
+    WorkbookSnapshot? workbook,
+    ExtractionAvailability excelAvailability = const ExtractionAvailability.complete(),
+    ExtractionAvailability wordAvailability = const ExtractionAvailability.complete(),
     Map<String, List<List<String>>>? rawSheets,
   }) {
+    final effectiveWorkbook = workbook ?? (rawSheets != null ? _snapshotFromRaw(rawSheets) : WorkbookSnapshot.empty());
+
     final duplicateIds = scanDuplicateTestIds(records);
     final metricsComparison = compareMetrics(
       records: records,
       wordText: wordText,
       excelText: excelText,
-      rawSheets: rawSheets,
+      workbook: effectiveWorkbook,
+      availability: excelAvailability,
     );
     final environmentMismatches = checkEnvironmentMismatch(
       wordText: wordText,
       excelText: excelText,
       registrationText: registrationText,
-      rawSheets: rawSheets,
+      workbook: effectiveWorkbook,
     );
     final timelineConflicts = checkMilestoneDelay(
       wordText: wordText,
       excelText: excelText,
-      rawSheets: rawSheets,
+      workbook: effectiveWorkbook,
     );
     final integrityFindings = checkAdministrativeAndIntegrity(
       records: records,
       wordText: wordText,
       excelText: excelText,
-      rawSheets: rawSheets,
+      workbook: effectiveWorkbook,
     );
+
+    final ruleOutcomes = <String, RuleOutcome>{
+      'duplicate-ids': RuleOutcome(
+        ruleId: 'duplicate-ids',
+        kind: duplicateIds.isEmpty ? RuleOutcomeKind.checkedClean : RuleOutcomeKind.checkedWithFindings,
+        findings: duplicateIds,
+        message: duplicateIds.isEmpty ? 'Không có ID trùng lặp liên sheet.' : 'Phát hiện ${duplicateIds.length} ca trùng ID.',
+      ),
+      'metrics-comparison': RuleOutcome(
+        ruleId: 'metrics-comparison',
+        kind: metricsComparison.findings.isEmpty ? RuleOutcomeKind.checkedClean : RuleOutcomeKind.checkedWithFindings,
+        findings: metricsComparison.findings,
+        message: metricsComparison.findings.isEmpty ? 'Số liệu khớp giữa các nguồn.' : 'Phát hiện lệch số liệu.',
+      ),
+      'environment-mismatch': const RuleOutcome(
+        ruleId: 'environment-mismatch',
+        kind: RuleOutcomeKind.notApplicable,
+        message: 'Đã ủy quyền kiểm tra ngữ nghĩa công nghệ & CSDL cho AI (Trục 1).',
+      ),
+      'timeline-check': RuleOutcome(
+        ruleId: 'timeline-check',
+        kind: timelineConflicts.isEmpty ? RuleOutcomeKind.checkedClean : RuleOutcomeKind.checkedWithFindings,
+        findings: timelineConflicts,
+        message: timelineConflicts.isEmpty ? 'Tiến độ phù hợp hoặc không có mốc thời gian.' : 'Phát hiện chậm tiến độ.',
+      ),
+      'integrity-check': RuleOutcome(
+        ruleId: 'integrity-check',
+        kind: integrityFindings.isEmpty ? RuleOutcomeKind.checkedClean : RuleOutcomeKind.checkedWithFindings,
+        findings: integrityFindings,
+        message: integrityFindings.isEmpty ? 'Toàn vẹn dữ liệu bảo đảm.' : 'Phát hiện ${integrityFindings.length} vi phạm toàn vẹn dữ liệu.',
+      ),
+    };
 
     return CrossCheckResult(
       duplicateIds: duplicateIds,
@@ -633,27 +449,54 @@ class CrossCheckEngine {
       environmentMismatches: environmentMismatches,
       timelineConflicts: timelineConflicts,
       integrityFindings: integrityFindings,
+      ruleOutcomes: ruleOutcomes,
     );
+  }
+
+  static WorkbookSnapshot _snapshotFromRaw(Map<String, List<List<String>>> raw) {
+    final wbSheets = <WorkbookSheet>[];
+    for (final entry in raw.entries) {
+      final rows = <WorkbookRow>[];
+      for (var r = 0; r < entry.value.length; r++) {
+        final cells = <WorkbookCell>[];
+        for (var c = 0; c < entry.value[r].length; c++) {
+          cells.add(WorkbookCell(
+            rowIndex: r,
+            columnIndex: c,
+            address: '${String.fromCharCode(65 + (c % 26))}${r + 1}',
+            kind: CellValueKind.text,
+            text: entry.value[r][c],
+          ));
+        }
+        rows.add(WorkbookRow(rowIndex: r, cells: cells));
+      }
+      wbSheets.add(WorkbookSheet(name: entry.key, rows: rows));
+    }
+    return WorkbookSnapshot(sheets: wbSheets);
   }
 }
 
-DateTime? _parseDate(String raw) {
+DateTime? _parseDateStrict(String raw) {
   final s = raw.trim();
-  final slash = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})').firstMatch(s);
+  final slash = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(s);
   if (slash != null) {
-    return DateTime(
-      int.parse(slash.group(3)!),
-      int.parse(slash.group(2)!),
-      int.parse(slash.group(1)!),
-    );
+    final d = int.parse(slash.group(1)!);
+    final m = int.parse(slash.group(2)!);
+    final y = int.parse(slash.group(3)!);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    final dt = DateTime(y, m, d);
+    if (dt.year != y || dt.month != m || dt.day != d) return null; // Reject 31/02
+    return dt;
   }
-  final dash = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(s);
+  final dash = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(s);
   if (dash != null) {
-    return DateTime(
-      int.parse(dash.group(1)!),
-      int.parse(dash.group(2)!),
-      int.parse(dash.group(3)!),
-    );
+    final y = int.parse(dash.group(1)!);
+    final m = int.parse(dash.group(2)!);
+    final d = int.parse(dash.group(3)!);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    final dt = DateTime(y, m, d);
+    if (dt.year != y || dt.month != m || dt.day != d) return null;
+    return dt;
   }
-  return DateTime.tryParse(s);
+  return null;
 }
