@@ -15,8 +15,8 @@ import '../../../core/services/quote_guard.dart';
 import '../../../core/services/registration_pii.dart';
 import '../../review/review_bundle.dart';
 import '../../../core/services/cross_check_engine.dart';
+import '../../../core/services/review_report_composer.dart';
 import '../../../core/services/test_case_review_engine.dart';
-
 class UploadState {
   UploadState({
     this.excelPath,
@@ -30,7 +30,6 @@ class UploadState {
     this.skippedSheets = const [],
     this.unknownModules = const [],
     this.truncated = false,
-    this.deepPass = false,
     this.runId = 0,
   });
 
@@ -45,7 +44,6 @@ class UploadState {
   final List<String> skippedSheets;
   final List<String> unknownModules;
   final bool truncated;
-  final bool deepPass;
   final int runId;
 
   bool get canAnalyze =>
@@ -80,7 +78,6 @@ class UploadState {
     List<String>? skippedSheets,
     List<String>? unknownModules,
     bool? truncated,
-    bool? deepPass,
     int? runId,
   }) {
     return UploadState(
@@ -95,7 +92,6 @@ class UploadState {
       skippedSheets: skippedSheets ?? this.skippedSheets,
       unknownModules: unknownModules ?? this.unknownModules,
       truncated: truncated ?? this.truncated,
-      deepPass: deepPass ?? this.deepPass,
       runId: runId ?? this.runId,
     );
   }
@@ -113,7 +109,6 @@ class UploadState {
       skippedSheets: skippedSheets,
       unknownModules: unknownModules,
       truncated: truncated,
-      deepPass: deepPass,
       runId: runId,
     );
   }
@@ -200,7 +195,6 @@ class UploadController extends Notifier<UploadState> {
       apiKey: state.apiKey,
       provider: state.provider,
       statusMessage: status,
-      deepPass: state.deepPass,
     );
   }
 
@@ -217,7 +211,6 @@ class UploadController extends Notifier<UploadState> {
       apiKey: state.apiKey,
       provider: state.provider,
       statusMessage: inspection.statusMessage,
-      deepPass: state.deepPass,
     );
   }
 
@@ -234,7 +227,6 @@ class UploadController extends Notifier<UploadState> {
       skippedSheets: state.skippedSheets,
       unknownModules: state.unknownModules,
       truncated: state.truncated,
-      deepPass: state.deepPass,
       isAnalyzing: state.isAnalyzing,
       runId: state.runId,
     );
@@ -252,14 +244,9 @@ class UploadController extends Notifier<UploadState> {
       skippedSheets: state.skippedSheets,
       unknownModules: state.unknownModules,
       truncated: state.truncated,
-      deepPass: state.deepPass,
       isAnalyzing: state.isAnalyzing,
       runId: state.runId,
     );
-  }
-
-  void setDeepPass(bool value) {
-    state = state.copyWith(deepPass: value);
   }
 
   void clearExcel() {
@@ -269,7 +256,6 @@ class UploadController extends Notifier<UploadState> {
       registrationPath: state.registrationPath,
       apiKey: state.apiKey,
       provider: state.provider,
-      deepPass: state.deepPass,
     );
   }
 
@@ -280,7 +266,6 @@ class UploadController extends Notifier<UploadState> {
       registrationPath: state.registrationPath,
       apiKey: state.apiKey,
       provider: state.provider,
-      deepPass: state.deepPass,
     );
   }
 
@@ -291,7 +276,6 @@ class UploadController extends Notifier<UploadState> {
       srsPath: state.srsPath,
       apiKey: state.apiKey,
       provider: state.provider,
-      deepPass: state.deepPass,
     );
   }
 
@@ -307,7 +291,6 @@ class UploadController extends Notifier<UploadState> {
       provider: state.provider,
       isAnalyzing: false,
       statusMessage: 'Đã hủy.',
-      deepPass: state.deepPass,
       runId: _generation,
     );
   }
@@ -319,7 +302,6 @@ class UploadController extends Notifier<UploadState> {
       registrationPath: state.registrationPath,
       apiKey: state.apiKey,
       provider: state.provider,
-      deepPass: state.deepPass,
       runId: state.runId,
     );
   }
@@ -374,15 +356,14 @@ class UploadController extends Notifier<UploadState> {
       isAnalyzing: true,
       statusMessage:
           chunked ? 'Đang đọc file lớn...' : 'Đang trích tài liệu...',
-      deepPass: state.deepPass,
       runId: runId,
     );
 
     try {
       final regDoc = await _docService.extract(state.registrationPath!);
       if (_isStale(runId)) return null;
-      final registrationBlock =
-          extractRegistrationContext(regDoc.text).toPromptBlock();
+      final regContext = extractRegistrationContext(regDoc.text);
+      final registrationBlock = regContext.toPromptBlock();
 
       final excelResult =
           await _excelService.extractTestCases(state.excelPath!);
@@ -409,7 +390,9 @@ class UploadController extends Notifier<UploadState> {
         wordText: docResult.text,
         excelText: excelResult.text,
         registrationText: registrationBlock,
-        rawSheets: excelResult.rawSheets,
+        workbook: excelResult.workbook,
+        excelAvailability: excelResult.availability,
+        wordAvailability: docResult.availability,
       );
       final caseReviews = TestCaseReviewEngine.reviewAll(
         records: excelResult.records,
@@ -426,8 +409,6 @@ class UploadController extends Notifier<UploadState> {
         skippedSheets: excelResult.skippedSheets,
         unknownModules: unknown,
         truncated: excelResult.truncated || docResult.truncated,
-        statusMessage: 'Đang gọi AI...',
-        deepPass: state.deepPass,
         runId: runId,
       );
 
@@ -444,30 +425,34 @@ class UploadController extends Notifier<UploadState> {
         metrics: stats.toMarkdown(),
       );
       if (_isStale(runId)) return null;
-      if (state.deepPass) {
-        final deep = await aiService.reviewTestCases(
-          srsContent: docResult.text,
-          testCasesContent: excelResult.text,
-          deepPass: true,
-        );
-        if (_isStale(runId)) return null;
-        review = '$review\n\n## Pass 2\n\n$deep';
-      }
 
-      List<VerifiedFinding> verifiedFindings = const [];
+      LlmVerifierResult verifierResult = const LlmVerifierResult();
       try {
-        verifiedFindings = await aiService.runLlmVerifierPipeline(
+        verifierResult = await aiService.runLlmVerifierPipeline(
           srsContent: docResult.text,
           testCasesContent: excelResult.text,
+          registrationContext: registrationBlock,
           rawSources: [
             docResult.text,
             excelResult.text,
             registrationBlock,
           ],
         );
-      } catch (_) {
+      } catch (e, stack) {
+        debugPrint('⚠️ Lỗi pipeline LLM Verifier: $e\n$stack');
         // Fallback gracefully if AI is unavailable
       }
+
+      final verifiedFindings = verifierResult.verifiedFindings;
+      final projectInfo = verifierResult.projectInfo;
+      final effectiveStats = projectInfo.features.isNotEmpty
+          ? computeCoverage(
+              srsText: docResult.text,
+              records: excelResult.records,
+              unknownModules: unknown,
+              featureList: projectInfo.features,
+            )
+          : stats;
 
       final guarded = stripHallucinatedQuotes(review, [
         docResult.text,
@@ -475,54 +460,42 @@ class UploadController extends Notifier<UploadState> {
         registrationBlock,
       ]);
 
-      final buf = StringBuffer();
-      buf.writeln('# BÁO CÁO ĐÁNH GIÁ ĐỒ ÁN CAPSTONE: SRS ⟷ TEST REPORT\n');
-      buf.writeln('## 📋 PHẦN 1: THÔNG TIN BÌA & THIẾT LẬP MÔI TRƯỜNG');
-      buf.writeln('- **Tên đề tài:** Design & Implementation of a CDE System for BIM');
-      buf.writeln('- **Mã dự án:** SU26SE017 (GSU10)');
-      buf.writeln('- **Môi trường Frontend:** Vercel (Web App)');
-      buf.writeln('- **Cơ sở dữ liệu:** Azure SQL Database (Excel) vs PostgreSQL (Word)');
-      buf.writeln('- **Công cụ kiểm thử:** Manual (Browser, Postman), Automation (Playwright, Node.js)\n');
-      if (excelResult.preamble().isNotEmpty) buf.writeln(excelResult.preamble());
-      if (docResult.preamble().isNotEmpty) buf.writeln(docResult.preamble());
-
-      buf.writeln('\n${crossCheck.toMarkdown()}');
-      buf.writeln('\n${stats.toMarkdown()}');
-
-      if (checks.isNotEmpty) {
-        buf.writeln('\n## 🛠️ PHẦN 3: CHI TIẾT LỖI VI PHẠM QUY CHUẨN (HARD CHECKS)');
-        for (final c in checks) {
-          buf.writeln('- **[${c.code}]** ${c.message}');
-        }
-      }
-
-      buf.writeln('\n## 💡 PHẦN 4: KỊCH BẢN KIỂM THỬ BỔ SUNG & KHUYẾN NGHỊ HỘI ĐỒNG');
-      buf.writeln('### 3 Hành động khuyến nghị khẩn cấp trước khi ra hội đồng:');
-      buf.writeln('1. **Khắc phục 34 ca FAILED:** Excel đang có 34 ca Failed nhưng khai báo 0 Fail. Cần fix bug hoặc cập nhật trạng thái.');
-      buf.writeln('2. **Đồng nhất số liệu tổng:** Cập nhật bảng mục 5.2 trong Word từ 320 lên 338 ca để khớp với Excel M01-M10.');
-      buf.writeln('3. **Thống nhất cơ sở dữ liệu:** Thống nhất dùng PostgreSQL hay Azure SQL trong toàn bộ báo cáo và slide thuyết minh.\n');
-
-      if (verifiedFindings.isNotEmpty) {
-        buf.writeln('### Kịch bản kiểm thử bổ sung (Đã qua LLM Verifier thẩm định nhị phân):');
-        for (final vf in verifiedFindings) {
-          buf.writeln(vf.toMarkdown());
-        }
-        buf.writeln();
-      }
-
-      if (guarded.text.trim().isNotEmpty) {
-        buf.writeln('### Đánh giá định tính chuyên sâu từ AI:');
-        buf.writeln(guarded.text);
-      }
-
-      final bundle = ReviewBundle(
-        markdown: buf.toString(),
-        stats: stats,
+      final initialBundle = ReviewBundle(
+        markdown: '',
+        stats: effectiveStats,
         checks: checks,
         records: excelResult.records,
         caseReviews: caseReviews,
         crossCheck: crossCheck,
         verifiedFindings: verifiedFindings,
+        registrationContext: regContext,
+        projectInfo: projectInfo,
+        excelAvailability: excelResult.availability,
+        docAvailability: docResult.availability,
+      );
+
+      var markdownReport = ReviewReportComposer.compose(
+        initialBundle,
+        excelPreamble: excelResult.preamble(),
+        docPreamble: docResult.preamble(),
+      );
+
+      if (guarded.text.trim().isNotEmpty) {
+        markdownReport = '$markdownReport\n### Đánh giá định tính chuyên sâu từ AI:\n${guarded.text}\n';
+      }
+
+      final bundle = ReviewBundle(
+        markdown: markdownReport,
+        stats: effectiveStats,
+        checks: checks,
+        records: excelResult.records,
+        caseReviews: caseReviews,
+        crossCheck: crossCheck,
+        verifiedFindings: verifiedFindings,
+        registrationContext: regContext,
+        projectInfo: projectInfo,
+        excelAvailability: excelResult.availability,
+        docAvailability: docResult.availability,
       );
 
       if (_isStale(runId)) return null;
@@ -535,7 +508,6 @@ class UploadController extends Notifier<UploadState> {
         skippedSheets: excelResult.skippedSheets,
         unknownModules: unknown,
         truncated: excelResult.truncated || docResult.truncated,
-        deepPass: state.deepPass,
         runId: runId,
       );
       return bundle;
@@ -547,8 +519,6 @@ class UploadController extends Notifier<UploadState> {
         registrationPath: state.registrationPath,
         apiKey: '',
         provider: state.provider,
-        error: ApiKeyFormat.redact('Lỗi phân tích: $e', state.apiKey),
-        deepPass: state.deepPass,
         runId: runId,
       );
       return null;

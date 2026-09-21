@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../../../core/services/ai_service.dart';
 import '../../../../core/services/coverage_stats.dart';
 import '../../../../core/services/cross_check_engine.dart';
+import '../../../../core/services/registration_pii.dart';
 import 'coverage_gauge.dart';
 import 'metric_card.dart';
 
@@ -8,21 +10,24 @@ class OverviewTab extends StatelessWidget {
   final CoverageStats stats;
   final CrossCheckResult? crossCheck;
   final int totalRecordsCount;
+  final ProjectInfo? projectInfo;
+  final RegistrationContext? registrationContext;
 
   const OverviewTab({
     super.key,
     required this.stats,
     this.crossCheck,
     required this.totalRecordsCount,
+    this.projectInfo,
+    this.registrationContext,
   });
-
   @override
   Widget build(BuildContext context) {
     final hasComparison = crossCheck?.metricsComparison != null;
     final comparison = crossCheck?.metricsComparison;
-    final actualTotal = comparison?.actualTotal ?? totalRecordsCount;
-    final actualPassed = comparison?.actualPassed ?? stats.passed;
-    final actualFailed = comparison?.actualFailed ?? stats.failed;
+    final int actualTotal = comparison?.actualTotalVal ?? totalRecordsCount;
+    final int actualPassed = comparison?.actualPassedVal ?? stats.passed;
+    final int actualFailed = comparison?.actualFailedVal ?? stats.failed;
     final actualOther = comparison != null
         ? (actualTotal - actualPassed - actualFailed).clamp(0, actualTotal)
         : stats.untested;
@@ -32,6 +37,96 @@ class OverviewTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Project Metadata Card (Tên đề tài & Bối cảnh từ AI)
+          if ((projectInfo?.topic.isNotEmpty == true) ||
+              (registrationContext?.topic.isNotEmpty == true) ||
+              (projectInfo?.techStack.isNotEmpty == true)) ...[
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.blue.shade100),
+              ),
+              color: const Color(0xFFF8FAFC),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.school_outlined, color: Colors.blue.shade700, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            (projectInfo?.topic.isNotEmpty == true)
+                                ? projectInfo!.topic
+                                : (registrationContext?.topic.isNotEmpty == true
+                                    ? registrationContext!.topic
+                                    : 'Đề tài Capstone'),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if ((projectInfo?.description.isNotEmpty == true) ||
+                        (registrationContext?.description.isNotEmpty == true)) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        (projectInfo?.description.isNotEmpty == true)
+                            ? projectInfo!.description
+                            : (registrationContext?.description ?? ''),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade700,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    if (projectInfo?.techStack.isNotEmpty == true) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: projectInfo!.techStack
+                            .map(
+                              (tech) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.blue.shade200),
+                                ),
+                                child: Text(
+                                  tech,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blue.shade800,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
           if (crossCheck == null) ...[
             Container(
               padding: const EdgeInsets.all(16),
@@ -147,8 +242,8 @@ class OverviewTab extends StatelessWidget {
                                 ? const Color(0xFFDC2626)
                                 : const Color(0xFF16A34A),
                             subtitle: comparison != null &&
-                                    comparison.concealedFails > 0
-                                ? '🚨 Lệch: Báo cáo ghi nhận 0 Fail!'
+                                    comparison.concealedFailsVal > 0
+                                ? '[Cảnh báo] Báo cáo ghi nhận 0 Fail!'
                                 : (hasComparison
                                     ? 'Số ca thực thi thất bại'
                                     : (actualFailed > 0
@@ -240,71 +335,6 @@ class OverviewTab extends StatelessWidget {
             const SizedBox(height: 24),
           ],
 
-          // Module Coverage Breakdown List
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: Colors.grey.shade200),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'ĐỘ PHỦ THEO MODULE / SHEET',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (stats.coveredUseCases.isEmpty)
-                    const Text('Chưa có thông tin bao phủ theo use case.')
-                  else
-                    ...stats.coveredUseCases.map((uc) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check_circle,
-                                size: 16, color: Color(0xFF16A34A)),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                uc,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'Đã có test',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFF16A34A),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );

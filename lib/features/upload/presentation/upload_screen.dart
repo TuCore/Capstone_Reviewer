@@ -89,16 +89,6 @@ class UploadScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text(
-                      'Soi sâu từng use case (pass 2, chậm hơn)',
-                    ),
-                    value: state.deepPass,
-                    onChanged: locked
-                        ? null
-                        : (v) => controller.setDeepPass(v ?? false),
-                  ),
                   if (state.error != null)
                     Container(
                       padding: const EdgeInsets.all(12),

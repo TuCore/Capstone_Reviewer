@@ -95,51 +95,51 @@ class ReconciliationTab extends StatelessWidget {
                       rows: [
                         _buildRow(
                           'Tổng số Test Cases',
-                          '${comparison.wordTotal}',
-                          '${comparison.excelDeclaredTotal}',
-                          '${comparison.actualTotal}',
-                          comparison.totalDiscrepancy > 0
-                              ? '🚨 Lệch ${comparison.totalDiscrepancy} ca'
-                              : '✅ Khớp số liệu',
-                          isDiscrepant: comparison.totalDiscrepancy > 0,
+                          comparison.wordTotal.displayValue,
+                          comparison.excelDeclaredTotal.displayValue,
+                          comparison.actualTotal.displayValue,
+                          comparison.totalDiscrepancyVal > 0
+                              ? 'Lệch ${comparison.totalDiscrepancyVal} ca'
+                              : 'Khớp số liệu',
+                          isDiscrepant: comparison.totalDiscrepancyVal > 0,
                         ),
                         _buildRow(
                           'Test Cases: PASSED',
                           'N/A',
-                          '${comparison.excelDeclaredPassed}',
-                          '${comparison.actualPassed}',
-                          comparison.actualPassed == comparison.excelDeclaredPassed
-                              ? '✅ Khớp số liệu'
-                              : 'Lệch ${comparison.excelDeclaredPassed - comparison.actualPassed} ca',
-                          isDiscrepant: comparison.actualPassed !=
-                              comparison.excelDeclaredPassed,
+                          comparison.excelDeclaredPassed.displayValue,
+                          comparison.actualPassed.displayValue,
+                          comparison.actualPassedVal == comparison.excelDeclaredPassedVal
+                              ? 'Khớp số liệu'
+                              : 'Lệch ${comparison.excelDeclaredPassedVal - comparison.actualPassedVal} ca',
+                          isDiscrepant: comparison.actualPassedVal !=
+                              comparison.excelDeclaredPassedVal,
                         ),
                         _buildRow(
                           'Test Cases: FAILED',
-                          '${comparison.wordFailed}',
-                          '${comparison.excelDeclaredFailed}',
-                          '${comparison.actualFailed}',
-                          comparison.concealedFails > 0
-                              ? '🚨 Che giấu ${comparison.concealedFails} lỗi Fail!'
-                              : '✅ Khớp',
-                          isDiscrepant: comparison.concealedFails > 0,
+                          comparison.wordFailed.displayValue,
+                          comparison.excelDeclaredFailed.displayValue,
+                          comparison.actualFailed.displayValue,
+                          comparison.concealedFailsVal > 0
+                              ? '[Cảnh báo] Chưa khai báo ${comparison.concealedFailsVal} ca Fail'
+                              : 'Khớp',
+                          isDiscrepant: comparison.concealedFailsVal > 0,
                         ),
                         _buildRow(
                           'Test Cases: Manual',
-                          '${comparison.wordManual}',
+                          comparison.wordManual.displayValue,
                           'N/A',
-                          '${comparison.actualManual}',
-                          comparison.manualDiscrepancy > 0
-                              ? 'Lệch ${comparison.manualDiscrepancy} ca'
+                          comparison.actualManual.displayValue,
+                          comparison.manualDiscrepancyVal > 0
+                              ? 'Lệch ${comparison.manualDiscrepancyVal} ca'
                               : 'Khớp',
-                          isDiscrepant: comparison.manualDiscrepancy > 0,
+                          isDiscrepant: comparison.manualDiscrepancyVal > 0,
                         ),
                         _buildRow(
                           'Test Cases: Automation',
-                          '${comparison.wordAuto}',
+                          comparison.wordAuto.displayValue,
                           'N/A',
-                          '${comparison.actualAuto}',
-                          'Thực tế đọc ${comparison.actualAuto} ca',
+                          comparison.actualAuto.displayValue,
+                          'Thực tế đọc ${comparison.actualAuto.displayValue} ca',
                           isDiscrepant: false,
                         ),
                       ],

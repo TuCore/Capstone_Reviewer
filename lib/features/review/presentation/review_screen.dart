@@ -33,6 +33,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
         caseReviews: widget.bundle.caseReviews,
         crossCheck: widget.bundle.crossCheck,
         verifiedFindings: widget.bundle.verifiedFindings,
+        registrationContext: widget.bundle.registrationContext,
+        projectInfo: widget.bundle.projectInfo,
       );
       if (!mounted) return;
       setState(() => isExporting = false);
@@ -231,6 +233,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
               stats: bundle.stats,
               crossCheck: bundle.crossCheck,
               totalRecordsCount: bundle.records.length,
+              projectInfo: bundle.projectInfo,
+              registrationContext: bundle.registrationContext,
             ),
             ReconciliationTab(crossCheck: bundle.crossCheck),
             IntegrityTab(

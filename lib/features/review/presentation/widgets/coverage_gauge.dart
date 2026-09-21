@@ -64,12 +64,14 @@ class _CoverageGaugeState extends State<CoverageGauge>
   }
 
   Color _getCoverageColor(double ratio) {
+    if (widget.totalCount == 0) return Colors.blueGrey;
     if (ratio >= 0.8) return const Color(0xFF22C55E); // Green
     if (ratio >= 0.5) return const Color(0xFFEAB308); // Yellow/Amber
     return const Color(0xFFEF4444); // Red
   }
 
   String _getCoverageLabel(double ratio) {
+    if (widget.totalCount == 0) return 'Chưa trích xuất được Use Case từ SRS';
     if (ratio >= 0.8) return 'Độ bao phủ cao';
     if (ratio >= 0.5) return 'Bao phủ trung bình';
     return 'Cần bổ sung test case';
@@ -103,28 +105,38 @@ class _CoverageGaugeState extends State<CoverageGauge>
                   Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            percent,
-                            style: TextStyle(
-                              fontSize: 34,
-                              fontWeight: FontWeight.bold,
-                              color: color,
-                            ),
+                      if (widget.totalCount == 0)
+                        Text(
+                          'N/A',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: color,
                           ),
-                          Text(
-                            '%',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: color,
+                        )
+                      else
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              percent,
+                              style: TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.bold,
+                                color: color,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                            Text(
+                              '%',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: color,
+                              ),
+                            ),
+                          ],
+                        ),
                       const SizedBox(height: 2),
                       Text(
                         'COVERAGE',
@@ -158,7 +170,9 @@ class _CoverageGaugeState extends State<CoverageGauge>
             ),
             const SizedBox(height: 6),
             Text(
-              '${widget.coveredCount} / ${widget.totalCount} Use Cases',
+              widget.totalCount == 0
+                  ? 'Không tìm thấy đề mục Use Case'
+                  : '${widget.coveredCount} / ${widget.totalCount} Use Cases',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey.shade600,

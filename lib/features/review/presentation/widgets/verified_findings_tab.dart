@@ -29,7 +29,7 @@ class VerifiedFindingsTab extends StatelessWidget {
                       const Icon(Icons.verified, color: Color(0xFF16A34A)),
                       const SizedBox(width: 8),
                       Text(
-                        'KỊCH BẢN KIỂM THỬ BỔ SUNG ĐÃ THẨM ĐỊNH (${verifiedFindings.length})',
+                        'PHÁT HIỆN NGỮ NGHĨA ĐÃ THẨM ĐỊNH (${verifiedFindings.length})',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -58,7 +58,7 @@ class VerifiedFindingsTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Chỉ những kịch bản có trích dẫn nguyên văn từ tài liệu nguồn (SRS / Phiếu đăng ký / Test Report) và vượt qua vòng thẩm định nhị phân mới được hiển thị tại đây.',
+                    'Các phát hiện trên 6 trục (Công nghệ, Phạm vi tính năng, Phân quyền, Copy-paste, Logic kiểm thử, Chất lượng viết) đã có trích dẫn nguyên văn và vượt qua kiểm định nhị phân LLM-as-a-Verifier.',
                     style: TextStyle(
                       fontSize: 13,
                       color: Colors.grey.shade600,
@@ -130,7 +130,27 @@ class VerifiedFindingsTab extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 8),
+                                if (finding.axis.isNotEmpty) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.blue.shade200),
+                                    ),
+                                    child: Text(
+                                      'Trục: ${finding.axis}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blue.shade800,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
                                 if (finding.module.isNotEmpty) ...[
                                   Container(
                                     padding: const EdgeInsets.symmetric(
