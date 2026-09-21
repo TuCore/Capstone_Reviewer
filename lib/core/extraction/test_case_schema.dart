@@ -26,6 +26,7 @@ class TestCaseRecord {
     this.bug = '',
     this.canonicalId = '',
     this.canonicalDescription = '',
+    this.sourceRow,
   });
 
   final String sheet;
@@ -41,7 +42,7 @@ class TestCaseRecord {
   final String bug;
   final String canonicalId;
   final String canonicalDescription;
-
+  final int? sourceRow;
   Map<String, String> toGolden() => {
         'sheet': sheet,
         'id': canonicalId.isEmpty ? normalizeCode(id) : canonicalId,
@@ -68,6 +69,7 @@ double coverageRatio({
 const _aliasTable = <CanonicalField, List<String>>{
   CanonicalField.id: [
     'test case id',
+    'test id',
     'testcaseid',
     'tc id',
     'tcid',
@@ -115,6 +117,10 @@ const _aliasTable = <CanonicalField, List<String>>{
     'expected',
   ],
   CanonicalField.status: [
+    'final status',
+    'final result',
+    'ket qua cuoi',
+    'trang thai cuoi',
     'round 1 (pass/fail)',
     'round 2 (pass/fail)',
     'round 3 (pass/fail)',
@@ -240,13 +246,48 @@ CanonicalField? matchHeader(String raw) {
   }
   return null;
 }
+int _statusHeaderPriority(String header) {
+  final folded = foldHeader(header);
+  if (folded.contains('final') ||
+      folded.contains('cuoi') ||
+      folded.contains('actual result') ||
+      folded.contains('ket qua thuc te')) {
+    return 1000;
+  }
+  final roundMatch = RegExp(r'round\s*(\d+)', caseSensitive: false).firstMatch(folded);
+  if (roundMatch != null) {
+    final roundNum = int.tryParse(roundMatch.group(1)!) ?? 1;
+    return 100 + roundNum;
+  }
+  if (folded == 'status' ||
+      folded == 'ket qua test' ||
+      folded == 'result' ||
+      folded == 'test result') {
+    return 50;
+  }
+  return 10;
+}
 
 Map<CanonicalField, int> mapHeaders(List<String> headers) {
   final mapped = <CanonicalField, int>{};
   for (var i = 0; i < headers.length; i++) {
     final field = matchHeader(headers[i]);
     if (field == null) continue;
-    mapped.putIfAbsent(field, () => i);
+
+    if (field == CanonicalField.status) {
+      final existingIdx = mapped[field];
+      if (existingIdx == null) {
+        mapped[field] = i;
+      } else {
+        final existingPriority = _statusHeaderPriority(headers[existingIdx]);
+        final currentPriority = _statusHeaderPriority(headers[i]);
+        if (currentPriority > existingPriority) {
+          mapped[field] = i;
+        }
+      }
+    } else {
+      mapped.putIfAbsent(field, () => i);
+    }
   }
   return mapped;
 }

@@ -1,7 +1,8 @@
+import '../services/cross_check_models.dart';
 import 'test_case_schema.dart';
-
+import 'workbook_snapshot.dart';
 class ExtractionResult {
-  const ExtractionResult({
+  ExtractionResult({
     required this.text,
     this.skippedSheets = const [],
     this.unknownModules = const [],
@@ -11,9 +12,9 @@ class ExtractionResult {
     this.rowCount = 0,
     this.warnings = const [],
     this.records = const [],
-    this.rawSheets = const {},
-  });
-
+    WorkbookSnapshot? workbook,
+    this.availability = const ExtractionAvailability.complete(),
+  }) : workbook = workbook ?? WorkbookSnapshot.empty();
   final String text;
   final List<String> skippedSheets;
   final List<String> unknownModules;
@@ -23,8 +24,10 @@ class ExtractionResult {
   final int rowCount;
   final List<String> warnings;
   final List<TestCaseRecord> records;
-  final Map<String, List<List<String>>> rawSheets;
+  final WorkbookSnapshot workbook;
+  final ExtractionAvailability availability;
 
+  Map<String, List<List<String>>> get rawSheets => workbook.toTextSheets();
   String preamble() {
     final lines = <String>[];
     final abnormal = skippedSheets.where((s) {

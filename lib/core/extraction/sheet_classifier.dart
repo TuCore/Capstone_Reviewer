@@ -114,6 +114,7 @@ TestCaseRecord recordFromRow({
   required String sheet,
   required List<String> row,
   required Map<CanonicalField, int> columns,
+  int? sourceRow,
 }) {
   String at(CanonicalField field) {
     final i = columns[field];
@@ -137,6 +138,7 @@ TestCaseRecord recordFromRow({
     bug: at(CanonicalField.bug),
     canonicalId: normalizeCode(id),
     canonicalDescription: canonicalizePhrase(description),
+    sourceRow: sourceRow,
   );
 }
 

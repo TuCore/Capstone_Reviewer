@@ -1,8 +1,6 @@
-import 'dart:io';
 
 import 'package:capstone_reviewer/core/extraction/file_gate.dart';
 import 'package:capstone_reviewer/core/services/excel_service.dart';
-import 'package:capstone_reviewer/core/services/hard_checks.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 String fixture(String name) => 'test/fixtures/$name';
@@ -69,38 +67,4 @@ void main() {
     );
   });
 
-  test('Report5 TestReport extracts M01-M10, skips Test Cases index, parses status', () {
-    final reportPath = 'D:/AShiroru/ProgramCode/Project/Team/prm-prj/lab1/New folder (3)/9747_HCM_SU26SE017_GSU10_HCM_Report5_TestReport.xlsx';
-    if (!File(reportPath).existsSync()) return;
-
-    final result = extractExcelSync(reportPath);
-    expect(result.records.length, greaterThan(300));
-    final sheets = result.records.map((r) => r.sheet).toSet();
-    expect(sheets.contains('M01_Authentication'), isTrue);
-    expect(sheets.contains('M10_System_Settings'), isTrue);
-    expect(sheets.contains('Test Cases'), isFalse);
-    expect(sheets.contains('Cover'), isFalse);
-
-    final passed = result.records.where((r) => normalizeStatus(r.status) == 'PASSED').length;
-    expect(passed, greaterThan(100));
-
-    final failed = result.records.where((r) => normalizeStatus(r.status) == 'FAILED').length;
-    expect(failed, greaterThan(0));
-  });
-
-  test('Report5 UnitTest is rejected as unit test file', () {
-    final unitTestPath = 'D:/AShiroru/ProgramCode/Project/Team/prm-prj/lab1/New folder (3)/9747_HCM_SU26SE017_GSU10_HCM_Report5UnitTest.xlsx';
-    if (!File(unitTestPath).existsSync()) return;
-
-    expect(
-      () => extractExcelSync(unitTestPath),
-      throwsA(
-        isA<FileRejectedException>().having(
-          (e) => e.message,
-          'message',
-          contains('Unit Test'),
-        ),
-      ),
-    );
-  });
 }

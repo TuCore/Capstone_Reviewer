@@ -7,7 +7,8 @@ import '../extraction/extraction_result.dart';
 import '../extraction/file_gate.dart';
 import '../extraction/sheet_classifier.dart';
 import '../extraction/test_case_schema.dart';
-
+import '../extraction/workbook_snapshot.dart';
+import 'cross_check_models.dart';
 class ExcelService {
   Future<ExtractionResult> extractTestCases(String filePath) async {
     final inspection = FileGate.inspect(filePath);
@@ -60,9 +61,22 @@ ExtractionResult extractExcelFromRows(
   int budgetChars = FileGate.promptBudgetChars,
   int sizeBytes = 0,
 }) {
-  final sheetNames = sheets.keys.map((s) => s.toLowerCase().trim()).toList();
+  final workbook = _snapshotFromTextSheets(sheets);
+  return extractExcelFromWorkbook(
+    workbook,
+    budgetChars: budgetChars,
+    sizeBytes: sizeBytes,
+  );
+}
+
+ExtractionResult extractExcelFromWorkbook(
+  WorkbookSnapshot workbook, {
+  int budgetChars = FileGate.promptBudgetChars,
+  int sizeBytes = 0,
+}) {
+  final sheetNames = workbook.sheetNames.map((s) => s.toLowerCase().trim()).toList();
   final hasFunctions = sheetNames.contains('functions');
-  final fPrefixCount = sheets.keys
+  final fPrefixCount = workbook.sheetNames
       .where((s) => RegExp(r'^f\d+', caseSensitive: false).hasMatch(s))
       .length;
   if (hasFunctions || fPrefixCount >= 3) {
@@ -74,20 +88,22 @@ ExtractionResult extractExcelFromRows(
   final skipped = <String>[];
   final kept = <String, List<TestCaseRecord>>{};
 
-  for (final entry in sheets.entries) {
-    final verdict = classifySheet(name: entry.key, rows: entry.value);
+  for (final sheet in workbook.sheets) {
+    final textRows = sheet.toTextRows();
+    final verdict = classifySheet(name: sheet.name, rows: textRows);
     if (!verdict.keep) {
-      skipped.add('${entry.key} (${verdict.skipReason})');
+      skipped.add('${sheet.name} (${verdict.skipReason})');
       continue;
     }
     final records = <TestCaseRecord>[];
-    for (var i = verdict.headerRowIndex + 1; i < entry.value.length; i++) {
-      final row = entry.value[i];
-      if (!rowHasContent(row)) continue;
+    for (var i = verdict.headerRowIndex + 1; i < sheet.rows.length; i++) {
+      final row = sheet.rows[i];
+      if (!row.hasContent) continue;
       final rec = recordFromRow(
-        sheet: entry.key,
-        row: row,
+        sheet: sheet.name,
+        row: row.toTextList(),
         columns: verdict.columns,
+        sourceRow: row.rowIndex + 1,
       );
       if (rec.id.isEmpty && rec.description.isEmpty) continue;
       if (rec.steps.isEmpty &&
@@ -98,55 +114,83 @@ ExtractionResult extractExcelFromRows(
       records.add(rec);
     }
     if (records.isEmpty) {
-      skipped.add('${entry.key} (không có dòng dữ liệu)');
+      skipped.add('${sheet.name} (không có dòng dữ liệu)');
       continue;
     }
-    kept[entry.key] = records;
+    kept[sheet.name] = records;
   }
 
   return _cutSheets(
     kept,
-    rawSheets: sheets,
+    workbook: workbook,
     skipped: skipped,
     budgetChars: budgetChars,
     sizeBytes: sizeBytes,
-    sheetCount: sheets.length,
-    rowCount: sheets.values.fold<int>(0, (n, rows) => n + rows.length),
+    sheetCount: workbook.sheets.length,
+    rowCount: workbook.sheets.fold<int>(0, (n, s) => n + s.rows.length),
   );
 }
 
 ExtractionResult _fromWorkbook(Excel excel, {required int sizeBytes}) {
-  final sheets = <String, List<List<String>>>{};
+  final workbook = _snapshotFromExcel(excel);
+  return extractExcelFromWorkbook(workbook, sizeBytes: sizeBytes);
+}
+
+WorkbookSnapshot _snapshotFromExcel(Excel excel) {
+  final sheets = <WorkbookSheet>[];
   for (final name in excel.tables.keys) {
     final sheet = excel.tables[name];
     if (sheet == null) continue;
-    sheets[name] = _readRows(sheet);
+    final rows = <WorkbookRow>[];
+    var emptyStreak = 0;
+    for (var r = 0; r < sheet.maxRows; r++) {
+      final excelRow = sheet.row(r);
+      final cells = <WorkbookCell>[];
+      for (var c = 0; c < excelRow.length; c++) {
+        cells.add(WorkbookCell.fromExcelData(excelRow[c], rowIndex: r, columnIndex: c));
+      }
+      final row = WorkbookRow(rowIndex: r, cells: cells);
+      if (!row.hasContent) {
+        emptyStreak++;
+        if (emptyStreak >= 50) break;
+        continue;
+      }
+      emptyStreak = 0;
+      rows.add(row);
+    }
+    sheets.add(WorkbookSheet(name: name, rows: rows));
   }
-  return extractExcelFromRows(sheets, sizeBytes: sizeBytes);
+  return WorkbookSnapshot(sheets: sheets);
 }
 
-List<List<String>> _readRows(Sheet sheet) {
-  final rows = <List<String>>[];
-  var emptyStreak = 0;
-  for (var i = 0; i < sheet.maxRows; i++) {
-    final row = sheet
-        .row(i)
-        .map((cell) => cell?.value?.toString().trim() ?? '')
-        .toList();
-    if (!rowHasContent(row)) {
-      emptyStreak++;
-      if (emptyStreak >= 50) break;
-      continue;
+WorkbookSnapshot _snapshotFromTextSheets(Map<String, List<List<String>>> sheets) {
+  final wbSheets = <WorkbookSheet>[];
+  for (final entry in sheets.entries) {
+    final rows = <WorkbookRow>[];
+    for (var r = 0; r < entry.value.length; r++) {
+      final textRow = entry.value[r];
+      final cells = <WorkbookCell>[];
+      for (var c = 0; c < textRow.length; c++) {
+        cells.add(WorkbookCell(
+          rowIndex: r,
+          columnIndex: c,
+          address: '${String.fromCharCode(65 + (c % 26))}${r + 1}',
+          kind: CellValueKind.text,
+          text: textRow[c],
+          rawValue: textRow[c],
+        ));
+      }
+      rows.add(WorkbookRow(rowIndex: r, cells: cells));
     }
-    emptyStreak = 0;
-    rows.add(row);
+    wbSheets.add(WorkbookSheet(name: entry.key, rows: rows));
   }
-  return rows;
+  return WorkbookSnapshot(sheets: wbSheets);
 }
+
 
 ExtractionResult _cutSheets(
   Map<String, List<TestCaseRecord>> kept, {
-  Map<String, List<List<String>>> rawSheets = const {},
+  required WorkbookSnapshot workbook,
   required List<String> skipped,
   required int budgetChars,
   required int sizeBytes,
@@ -157,35 +201,44 @@ ExtractionResult _cutSheets(
       ? budgetChars
       : FileGate.maxIsolateStringBytes;
   final names = kept.keys.toList();
-  final copies = {
+  final promptCopies = {
     for (final name in names) name: List<TestCaseRecord>.from(kept[name]!),
   };
   var truncated = false;
   final unknown = <String>[];
 
-  String render() => _renderSheets(copies);
+  String render() => _renderSheets(promptCopies);
 
-  while (render().length > cap && copies.isNotEmpty) {
+  while (render().length > cap && promptCopies.isNotEmpty) {
     truncated = true;
-    final last = copies.keys.last;
-    final list = copies[last]!;
+    final last = promptCopies.keys.last;
+    final list = promptCopies[last]!;
     if (list.isNotEmpty) {
       list.removeLast();
       if (list.isEmpty) {
-        copies.remove(last);
+        promptCopies.remove(last);
         unknown.insert(0, last);
       }
     } else {
-      copies.remove(last);
+      promptCopies.remove(last);
       unknown.insert(0, last);
     }
   }
 
-  final records = copies.values.expand((e) => e).toList();
+  // Preserve the FULL deterministic record set
+  final allRecords = kept.values.expand((e) => e).toList();
+
   final text = [
     render(),
     ...unknown.map((m) => 'UNKNOWN: $m'),
   ].where((s) => s.trim().isNotEmpty).join('\n\n');
+
+  final availability = truncated
+      ? const ExtractionAvailability.partial(
+          code: 'PROMPT_BUDGET_TRUNCATED',
+          message: 'Dữ liệu văn bản cho AI bị cắt giảm do vượt giới hạn ký tự.',
+        )
+      : const ExtractionAvailability.complete();
 
   return ExtractionResult(
     text: text,
@@ -195,8 +248,9 @@ ExtractionResult _cutSheets(
     sizeBytes: sizeBytes,
     sheetCount: sheetCount,
     rowCount: rowCount,
-    records: records,
-    rawSheets: rawSheets,
+    records: allRecords,
+    workbook: workbook,
+    availability: availability,
   );
 }
 

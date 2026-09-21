@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
-
+import '../services/cross_check_models.dart';
 import 'extraction_result.dart';
 import 'file_gate.dart';
 
@@ -191,11 +191,27 @@ ExtractionResult _cutAndRender(
     text,
     if (unknownLines.isNotEmpty) unknownLines,
   ].where((s) => s.trim().isNotEmpty).join('\n\n');
+  final ExtractionAvailability availability;
+  if (combined.trim().isEmpty) {
+    availability = const ExtractionAvailability.unsupported(
+      code: 'EMPTY_DOCUMENT',
+      message: 'Tài liệu không có nội dung văn bản (có thể là file rỗng hoặc scan/ảnh).',
+    );
+  } else if (cut.truncated) {
+    availability = const ExtractionAvailability.partial(
+      code: 'PROMPT_BUDGET_TRUNCATED',
+      message: 'Tài liệu bị cắt bớt do vượt quá giới hạn ký tự.',
+    );
+  } else {
+    availability = const ExtractionAvailability.complete();
+  }
+
   return ExtractionResult(
     text: combined,
     unknownModules: cut.unknownModules,
     truncated: cut.truncated,
     sizeBytes: sizeBytes,
+    availability: availability,
   );
 }
 
