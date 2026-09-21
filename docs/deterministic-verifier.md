@@ -1,15 +1,14 @@
-# Deterministic Engine & LLM-as-a-Verifier Architecture
+# Prompt-First Semantic Engine & LLM-as-a-Verifier Architecture
 
 ## 1. Overview & Problem Statement
 
-Hệ thống đánh giá đồ án Capstone yêu cầu độ chính xác và tính nhất quán tuyệt đối (**100% reproducible, zero hallucination**). Nếu giao toàn bộ việc đối chiếu số liệu hoặc kiểm tra toàn vẹn tài liệu cho LLM, hệ thống sẽ gặp các vấn đề cố hữu:
-- Ảo giác số liệu (hallucination về số lượng test case, tỉ lệ pass/fail).
-- Kết quả thiếu nhất quán qua các lượt chạy khác nhau.
-- Bỏ sót các lỗi dữ liệu vi mô (trùng test case ID giữa các module, mâu thuẫn trạng thái Pass/Fail, lệch ngày tháng hay lệch cấu hình database).
+Hệ thống đánh giá đồ án Capstone yêu cầu độ chính xác tuyệt đối (**100% reproducible, zero hallucination**) kết hợp khả năng đọc hiểu ngữ nghĩa toàn diện mọi đề tài.
 
-Để giải quyết triệt để, kiến trúc chia tách nhiệm vụ thành **2 trụ cột cốt lõi**:
-1. **Deterministic Code Engine (Pure Dart)**: Đảm nhận 100% kiểm tra toán học, tính toàn vẹn dữ liệu, quét xung đột, phát hiện lệch môi trường/tiến độ với tốc độ mili-giây, không phụ thuộc AI.
-2. **LLM-as-a-Verifier (2-Pass Verification + Code Gatekeeper)**: Ứng dụng mô hình Generator-Verifier kết hợp rào chắn mã nguồn để phân tích định tính các ca test thiếu sót, loại bỏ triệt để các nhận định vô căn cứ.
+Thế hệ trước dựa vào Regex trong Dart để đoán từ khóa công nghệ (database, environment, tên đề tài, use cases) gặp phải hạn chế cốt lõi: ngôn ngữ tự nhiên của sinh viên biến hóa khôn lường, không bộ regex nào có thể bao quát hết 1 triệu từ của loài người. Ngược lại, nếu phó mặc toàn bộ số liệu cho LLM, hệ thống sẽ gặp ảo giác số học (hallucination về số lượng test case, tỉ lệ pass/fail).
+
+Do đó, kiến trúc chuyển đổi toàn diện sang mô hình **Prompt-First Semantic Review Engine**:
+1. **Code Dart = Bản lề cơ học (Zero-Regex Semantics)**: Chịu trách nhiệm 100% việc nạp thô văn bản (raw ingestion), đếm dòng test case cơ học, đối chiếu số liệu 3 bên, quét trùng ID, phát hiện lệch timeline, và chốt chặn trích dẫn (Quote Gatekeeper). Tuyệt đối **không dùng regex đoán chữ ngữ nghĩa**.
+2. **LLM Prompt-First = Bộ não đọc hiểu 6 trục (6-Axis Semantic Understanding)**: Đọc hiểu toàn văn 3 tài liệu nguồn cùng lúc (SRS, Test Suite, Phiếu đăng ký) qua chu trình **Pass 1 Generator $\rightarrow$ Pass 2 Verifier $\rightarrow$ Pass 3 Dart Gatekeeper**.
 
 ---
 
@@ -17,54 +16,63 @@ Hệ thống đánh giá đồ án Capstone yêu cầu độ chính xác và tí
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│               ĐẦU VÀO (Word SRS/Report, Excel Test Suite)              │
+│      ĐẦU VÀO: Word SRS/Report + Excel Test Suite + Phiếu đăng ký       │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│             TẦNG 1: PURE DART DETERMINISTIC CODE ENGINE                │
-│  - 3-Way Metrics Cross-Check (Word vs Excel Header vs Actual Row Count) │
+│       TẦNG 1: DART RAW INGESTION & DETERMINISTIC CODE ENGINE           │
+│  - Bóc tách toàn văn sạch (clean raw text) từ Word, Excel, Registration│
+│  - 3-Way Metrics Cross-Check (Word vs Excel Header vs Actual Row Count)│
 │  - Duplicate Test Case IDs Across Modules                              │
 │  - Conflicting Pass/Fail Status on Same ID                             │
-│  - Environment & Tech Stack Mismatch (e.g., PostgreSQL vs Azure SQL)   │
 │  - Timeline & Milestone Conflict (Approval Deadline vs Execution Date) │
-│  - Placeholder & Copy-Paste Detection                                  │
+│  - Copy-Paste Description Clones & Sheet Index Integrity               │
+│  * ZERO-REGEX: Không đoán CSDL, Environment, Topic Title, Use Cases    │
 └───────────────────────────────────┬────────────────────────────────────┘
-                                    │ (Bộ dữ liệu sự thật số học)
+                                    │ (Toàn văn sạch + Sự thật số học)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│             TẦNG 2: GENERATOR (LLM Pass 1 - Hypothesis Generation)     │
-│  - Phân tích Use Cases / SRS và danh sách ca test hiện có              │
-│  - Sinh tối đa 5 đề xuất kịch bản còn thiếu (Negative, Edge, Security) │
+│    TẦNG 2: GENERATOR (AI Pass 1 - 6-Axis Comprehensive Semantic Prompt)│
+│  - Nhận trọn vẹn: <<SRS>>, <<TESTCASES>>, <<REGISTRATION>>, <<FACTS>>  │
+│  - Trích xuất Metadata: Tên đề tài, bối cảnh/mục tiêu dự án            │
+│  - Phân tích 6 Trục Ngữ nghĩa Toàn diện:                               │
+│    * Trục 1: Mâu thuẫn Công nghệ & Kiến trúc (Cross-source Tech Stack) │
+│    * Trục 2: Độ phủ Tính năng & Chức năng bị bỏ quên (Feature Omission)│
+│    * Trục 3: Vai trò & Phân quyền (Actor & RBAC Boundaries)            │
+│    * Trục 4: Lỗi Copy-Paste & Bất nhất giữa các Sheet                  │
+│    * Trục 5: Vi phạm Quy tắc Logic Nghiệp vụ (Business Logic in TCs)   │
+│    * Trục 6: Chất lượng Viết & Trình bày Ca kiểm thử (Wording/Format)  │
 └───────────────────────────────────┬────────────────────────────────────┘
-                                    │ (Candidate Missing Scenarios)
+                                    │ (Candidate Findings + exact_quote)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│             TẦNG 3: VERIFIER (LLM Pass 2 - Binary Grounding)           │
-│  - Thẩm định độc lập từng ứng viên: TRUE (hợp lệ) hoặc FALSE (bác bỏ)  │
-│  - Buộc trích dẫn trực tiếp (exact quote) từ ngữ cảnh tài liệu gốc     │
+│         TẦNG 3: VERIFIER (AI Pass 2 - Binary Grounding)                │
+│  - Thẩm định độc lập từng nhận định từ Pass 1: HỢP LỆ hay ẢO GIÁC?     │
+│  - Bắt buộc trích dẫn nguyên văn bằng chứng gốc (exact_quote)          │
 └───────────────────────────────────┬────────────────────────────────────┘
-                                    │
+                                    │ (Phán quyết nhị phân + exact_quote)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│             TẦNG 4: CODE GATEKEEPER (Strict Deterministic Filter)      │
-│  - Kiểm tra xâu trích dẫn (quote matching) trên tài liệu gốc           │
-│  - Bác bỏ nếu trích dẫn bịa đặt hoặc thiếu căn cứ                      │
+│     TẦNG 4: CODE GATEKEEPER (Dart Pass 3 - Verbatim Quote Containment) │
+│  - rawSources.contains(exact_quote): Kiểm tra chuỗi verbatim trên file │
+│  - Loại bỏ 100% nhận định có exact_quote bịa đặt hoặc không có thật    │
 └───────────────────────────────────┬────────────────────────────────────┘
-                                    │ (Đề xuất định tính đã kiểm chứng)
+                                    │ (Đề xuất định tính đã kiểm chứng 100%)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│             TẦNG 5: 4-PART DUAL REPORT EXPORTERS                       │
-│  - Excel 5 Sheets: Summary, 3-Way Metrics, Technical Bugs, Missing     │
-│    Scenarios, Raw CrossCheck                                           │
-│  - PDF A4 4 Parts: Cover, 3-Way Metrics Table, Technical Findings,     │
-│    Verified Recommendations                                            │
+│           TẦNG 5: SYNCHRONIZED PRESENTATION & DUAL EXPORTERS           │
+│  - UI: OverviewTab (Metadata, Metrics, Tech Stack), VerifiedFindingsTab│
+│    (Lọc chip theo 6 trục)                                              │
+│  - Excel 5 Sheets: Summary, 3-Way Metrics, Technical Bugs,             │
+│    6-Axis Verified Findings, Raw CrossCheck                            │
+│  - PDF Report: Chuẩn A4, phân mục rõ ràng, bảng biểu đối chiếu số liệu │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Pure Dart CrossCheckEngine
+## 3. Pure Dart CrossCheckEngine (Zero-Regex Semantics)
 
 `CrossCheckEngine` được triển khai hoàn toàn bằng Dart thuần túy trong `lib/services/cross_check_engine.dart` với các mô hình dữ liệu trong `lib/models/cross_check_result.dart`.
 
@@ -83,84 +91,99 @@ Các tiêu chí đối chiếu:
 - **Cross-module Duplicate IDs**: Quét toàn bộ test case trên mọi sheet module. Nếu một ID xuất hiện ở nhiều hơn 1 module (ví dụ `TC-NOT-UI-05` xuất hiện cả ở `M07_Notifications` và `M08_Dashboard_Reports`), engine ghi nhận lỗi vi phạm tính duy nhất.
 - **Pass/Fail State Conflict**: Khi phát hiện trùng ID, engine so sánh trường `status` giữa các lần xuất hiện. Nếu cùng một ID mà module A đánh dấu `PASS` còn module B đánh dấu `FAIL`, engine phát cờ `State Conflict` nghiêm trọng.
 
-### 3.3. Phát hiện Lệch Môi Trường & Cơ Sở Dữ Liệu (Environment Mismatch)
-- Đối chiếu cấu hình kỹ thuật giữa Word SRS, Excel Test Setup và thông tin đăng ký đề tài.
-- Bắt các từ khóa xung đột công nghệ: ví dụ Word ghi `PostgreSQL (Supabase)` trong khi Excel ghi `Azure SQL`, hoặc backend ghi `NodeJS` nhưng test environment lại cấu hình `Spring Boot`.
-
-### 3.4. Phát hiện Lệch Tiến Độ & Hạn Chót (Timeline Conflict)
+### 3.3. Phát hiện Lệch Tiến Độ & Hạn Chót (Timeline Conflict)
 - Trích xuất các mốc thời gian: Hạn chót phê duyệt đề tài (Approval Deadline), ngày nghiệm thu báo cáo Word, ngày thực hiện test trong file Excel.
 - Bắt mâu thuẫn thứ tự thời gian: Ví dụ hạn chót nộp báo cáo là `10/08/2026` nhưng ngày ghi nhận thực hiện kiểm thử trong Excel lại là `21/08/2026`.
 
-### 3.5. Kiểm tra Toàn vẹn Khác
+### 3.4. Kiểm tra Toàn vẹn Cấu trúc Khác
 - **Copy-Paste Description Clones**: Phát hiện lỗi copy-paste mô tả yêu cầu giữa các sheet (ví dụ sheet `M09_User_Role_Permissions` dán nhầm mô tả của module `M08_Dashboard`).
 - **Sheet Link Integrity**: So khớp danh sách sheet khai báo tại mục lục (Sheet Index/TOC) với danh sách sheet thực tế tồn tại trong workbook.
 
+### 3.5. Triết lý Zero-Regex trong Dart
+Toàn bộ logic regex đoán từ khóa ngữ nghĩa (`database`, `environment`, `use_case`, `topic_title`) trước đây đã được loại bỏ hoàn toàn khỏi Dart code engine:
+- Không cố tạo regex để đoán CSDL (PostgreSQL, MySQL, SQL Server, MongoDB, Oracle...).
+- Không cắt chuỗi 1200 ký tự thô để tìm dòng tên đề tài.
+- Việc đọc hiểu ngữ nghĩa, bối cảnh kỹ thuật và phát hiện mâu thuẫn công nghệ được chuyển giao 100% cho AI trong chu trình 3-Pass bên dưới.
+
 ---
 
-## 4. LLM-as-a-Verifier Architecture
+## 4. Prompt-First 6-Axis Semantic AI Pipeline
 
-Quy trình đánh giá định tính được tổ chức thành chu trình khép kín trong `lib/services/llm_verifier_service.dart`.
+Quy trình đọc hiểu ngữ nghĩa và phát hiện lỗ hổng được tổ chức thành chu trình khép kín trong `lib/services/ai_service.dart`.
 
-### 4.1. Pass 1: Generator (Đề xuất giả thuyết định tính)
-- **Input**: Đặc tả Use Case trong SRS, danh sách test case hiện có, bối cảnh nghiệp vụ.
-- **Output**: Danh sách JSON gồm tối đa 5 đề xuất kịch bản kiểm thử bị thiếu (Boundary, Negative, Security/Tamper, System Exception).
-- **Prompt Guardrails**: Generator chỉ được phép nêu các giả thuyết cần thiết nhất, không bịa đặt các module không tồn tại trong tài liệu.
+### 4.1. Pass 1: Generator (Prompt 6 Trục Toàn Diện)
+- **Input**: Toàn văn sạch của 3 tài liệu nguồn được đóng gói trong các khối tagged: `<<SRS>>`, `<<TESTCASES>>`, `<<REGISTRATION>>`, kèm `<<FACTS>>` số học do Dart cung cấp.
+- **Metadata Extraction**:
+  - Tự động nhận diện Tên đề tài (Tiếng Anh, Tiếng Việt, Mã viết tắt) dù nằm ở trang bìa, bảng thông tin hay phần mở đầu.
+  - Tóm tắt Bối cảnh / Mục tiêu dự án từ nội dung nghiệp vụ (không nhầm lẫn với danh sách giảng viên/sinh viên).
+  - Nhận diện danh sách Tech Stack dự án đã khai báo.
+- **Phân tích 6 Trục Ngữ nghĩa Toàn diện**:
+  1. **Trục 1: Mâu thuẫn Công nghệ & Kiến trúc (Cross-source Tech Stack)**:
+     - Đối chiếu chéo giữa SRS, Test Report và Phiếu đăng ký (ví dụ: SRS đăng ký Viettel Cloud/Postgres nhưng Excel test trên Azure SQL và Vercel).
+  2. **Trục 2: Độ phủ Tính năng & Chức năng bị bỏ quên (Feature Scope & Omission)**:
+     - Đọc danh sách chức năng trong SRS và đối chiếu với danh sách test case trong Excel $\rightarrow$ xác định đích danh chức năng nào có trong SRS nhưng **bị bỏ quên 0 test case**.
+  3. **Trục 3: Vai trò & Phân quyền (Actor & RBAC Boundaries)**:
+     - Kiểm tra quyền hạn của từng Actor trong SRS vs Expected Result trong Test Cases (ví dụ: phân quyền giữa Producer và Project Manager).
+  4. **Trục 4: Lỗi Copy-Paste & Bất nhất giữa các Sheet (Inconsistencies)**:
+     - Phát hiện dán nhầm requirement, mâu thuẫn mô tả hoặc trạng thái giữa các module.
+  5. **Trục 5: Vi phạm Quy tắc Logic Nghiệp vụ (Business Logic Violations)**:
+     - Phát hiện ca test có Expected Result vi phạm logic đã định nghĩa trong SRS (ví dụ: zone đã ban hành nhưng test case vẫn cho phép chỉnh sửa/xóa).
+  6. **Trục 6: Chất lượng Viết & Trình bày Ca kiểm thử (Wording & Formatting)**:
+     - Bắt các bước test mơ hồ, thiếu Test Data, Expected Output chung chung ("hệ thống hoạt động bình thường"), sai thuật ngữ.
+- **Data Contract Output**:
+  Mỗi phát hiện bắt buộc đi kèm trường `axis` (tên trục), `claim` (nội dung lỗi), `module` (phạm vi), và `quote` (đoạn trích sơ bộ).
 
-### 4.2. Pass 2: Verifier (Thẩm định nhị phân có đối chứng)
-- **Input**: Mỗi candidate scenario từ Pass 1 kết hợp với toàn văn các đoạn trích liên quan từ tài liệu gốc.
+### 4.2. Pass 2: Verifier (Thẩm định Nhị phân Độc lập)
+- **Input**: Từng candidate finding từ Pass 1 kết hợp với toàn văn các đoạn trích đối chứng từ tài liệu nguồn.
 - **Verification Rule**:
-  - Đánh giá theo chuẩn nhị phân: `isValid = true` (chấp thuận) hoặc `isValid = false` (bác bỏ).
-  - Yêu cầu bắt buộc trường `groundingQuote`: Trích dẫn nguyên văn bằng chứng từ tài liệu chứng minh rằng kịch bản này thực sự bắt buộc hoặc còn thiếu trong hệ thống.
-  - Nếu kịch bản không có căn cứ từ tài liệu hoặc dựa trên suy đoán vô căn cứ, Verifier đánh dấu `false`.
+  - Đánh giá theo chuẩn nhị phân độc lập: `isValid = true` (chấp thuận) hoặc `isValid = false` (bác bỏ / ảo giác).
+  - Yêu cầu bắt buộc trường `exact_quote`: Trích dẫn **nguyên văn từng ký tự (verbatim)** từ tài liệu gốc chứng minh nhận định là có căn cứ thực tế.
+  - Nếu nhận định mang tính phỏng đoán, suy diễn không có câu chữ chứng minh trong tài liệu, Verifier đánh dấu `false`.
 
-### 4.3. Code Gatekeeper (Lớp chốt chặn bằng mã nguồn)
-- Sau khi LLM Pass 2 trả về kết quả `true`, lớp mã nguồn Dart chạy thuật toán kiểm tra đối khớp chuỗi (`quote matching`):
-  - Tìm kiếm `groundingQuote` trong văn bản gốc.
-  - Nếu trích dẫn không tồn tại trong tài liệu (hallucinated quote) hoặc chuỗi quá ngắn/rỗng, Code Gatekeeper lập tức hạ cờ và loại bỏ đề xuất đó khỏi báo cáo cuối cùng.
-- Đảm bảo 100% các khuyến nghị lọt vào báo cáo đều có bằng chứng văn bản kiểm chứng được.
+### 4.3. Pass 3: Dart Code Gatekeeper (Kiểm chứng Chuỗi Verbatim)
+- Lớp mã nguồn Dart thực thi thuật toán kiểm chứng chuỗi đối với tất cả nhận định vượt qua Pass 2:
+  - Thực hiện `rawSources.contains(exact_quote)` trên toàn văn 3 file đầu vào.
+  - Bác bỏ và gạch tên 100% các nhận định có `exact_quote` bịa đặt, sai lệch so với bản gốc hoặc chuỗi rỗng/quá ngắn (`stripHallucinatedQuotes`).
+- **Đảm bảo Zero-Hallucination**: 100% nhận định xuất hiện trong báo cáo đều có căn cứ văn bản xác thực tuyệt đối.
 
 ---
 
-## 5. 4-Part Dual Report Exporters
+## 5. Synchronized UI & Dual Report Exporters
 
-Hệ thống xuất kết quả đánh giá đồng bộ ra 2 định dạng: Excel (`lib/services/excel_report_exporter.dart`) và PDF (`lib/services/pdf_report_exporter.dart`). Cả hai đều tuân thủ cấu trúc chuẩn 4 phần.
+Hệ thống đồng bộ toàn diện dữ liệu giữa giao diện người dùng và 2 định dạng xuất báo cáo (Excel & PDF):
 
-### 5.1. Bố cục Chuẩn 4 Phần (4-Part Standard Layout)
-1. **Phần 1: Bìa & Thiết lập Môi trường (Cover & Administrative Information)**
-   - Tên đề tài, mã dự án, nhóm sinh viên, giảng viên hướng dẫn, ngày đánh giá.
-   - Bảng môi trường kiểm thử (hệ điều hành, database, tools, phiên bản tài liệu).
-2. **Phần 2: Bảng Đối chiếu Số liệu 3 Bên (3-Way Metrics Reconciliation)**
-   - So sánh trực tiếp: Word vs Excel Khai báo vs Đếm thực tế.
-   - Thống kê chi tiết: Tổng số ca, Manual vs Automation, Pass/Fail/Pending, số lượng theo từng module.
-   - Cảnh báo chênh lệch số học và bất thường dữ liệu.
-3. **Phần 3: Bảng Lỗi Kỹ thuật Test Case (Technical Findings & Integrity Audit)**
-   - Danh sách ID trùng lặp giữa các module và mâu thuẫn Pass/Fail.
-   - Danh sách lỗi copy-paste mô tả, lệch tiến độ ngày tháng, lệch cấu hình công nghệ.
-4. **Phần 4: Kịch bản Kiểm thử Đề xuất Bổ sung (Verified Missing Scenarios)**
-   - Các kịch bản kiểm thử biên, kiểm thử lỗi, kiểm thử bảo mật đã vượt qua chu trình LLM Verifier và Code Gatekeeper.
-   - Đi kèm lý do khuyến nghị và trích dẫn bằng chứng tài liệu.
+### 5.1. Đồng bộ Giao diện Người dùng (UI Tabs)
+- **OverviewTab**:
+  - Hiển thị Tên đề tài, Mô tả bối cảnh do AI trích xuất (chấm dứt hoàn toàn tình trạng hiển thị "Chưa xác định").
+  - Danh sách công nghệ (Tech Stack) nhận diện từ tài liệu.
+  - Bảng thống kê đối chiếu số liệu 3 bên do Dart đếm cơ học.
+- **VerifiedFindingsTab**:
+  - Hiển thị danh sách các phát hiện đã qua thẩm định và gác cổng.
+  - Bộ lọc trực quan bằng Chips theo 6 trục ngữ nghĩa (Tech Mismatch, Feature Omission, RBAC, Copy-Paste, Logic, Wording).
 
 ### 5.2. Định dạng Excel (5 Sheets)
-File Excel kết quả bao gồm 5 worksheets chi tiết:
-1. `Summary`: Bìa, điểm số tổng quan, kết luận nghiệm thu và thông số môi trường.
-2. `3-Way Metrics`: Bảng ma trận so sánh số liệu giữa Word, Excel thống kê và đếm thực tế theo từng module.
-3. `Technical Bugs`: Bảng chi tiết toàn bộ lỗi kỹ thuật, trùng ID, mâu thuẫn kết quả Pass/Fail và lệch tiến độ/môi trường.
-4. `Missing Scenarios`: Danh sách các ca kiểm thử bổ sung đã được thẩm định.
-5. `Raw CrossCheck`: Dữ liệu kiểm tra toàn vẹn thô từ `CrossCheckEngine` để phục vụ audit/debug khi cần.
+Triển khai trong `lib/services/excel_export_service.dart`:
+1. `Summary`: Tên đề tài, mục tiêu, kết luận nghiệm thu, bảng môi trường & công nghệ.
+2. `3-Way Metrics`: Bảng so sánh số liệu giữa Word, Excel thống kê và đếm thực tế theo từng module.
+3. `Technical Bugs`: Danh sách lỗi kỹ thuật cơ học: trùng ID, mâu thuẫn Pass/Fail, lệch tiến độ.
+4. `6-Axis Verified Findings`: Bảng phát hiện ngữ nghĩa chi tiết phân loại theo 6 trục, đi kèm module, trích dẫn nguyên văn và căn cứ kiểm chứng.
+5. `Raw CrossCheck`: Dữ liệu toàn vẹn thô phục vụ tra cứu kiểm toán.
 
 ### 5.3. Định dạng PDF (Khổ A4)
-- Tài liệu PDF phân trang hoàn chỉnh, tối ưu cho in ấn và trình chiếu hội đồng:
-  - Trang bìa trang trọng với typography rõ ràng.
-  - Bảng biểu có màu sắc trực quan (Pass: Xanh, Fail/Warning: Đỏ/Cam).
-  - Tách trang rõ ràng giữa các phần, hỗ trợ Header/Footer đánh số trang dạng `Trang X / Y`.
+Triển khai trong `lib/services/pdf_report_exporter.dart`:
+- Tài liệu PDF phân trang hoàn chỉnh, chuẩn in ấn và trình chiếu hội đồng:
+  - Trang bìa trang trọng với thông tin đề tài chính xác từ AI.
+  - Bảng biểu đối chiếu số liệu 3 bên rõ ràng.
+  - Bảng lỗi kỹ thuật và các phát hiện ngữ nghĩa 6 trục có trích dẫn kiểm chứng.
+  - Header/Footer đánh số trang dạng `Trang X / Y`.
 
 ---
 
 ## 6. Test Verification & Code Quality
 
-Hệ thống được bảo vệ bởi bộ unit & integration tests toàn diện trong thư mục `test/`:
-- `test/cross_check_engine_test.dart`: Kiểm tra tính chính xác của thuật toán so khớp số liệu 3 bên, phát hiện trùng lặp ID, xung đột trạng thái Pass/Fail, lệch môi trường và lệch ngày tháng.
-- `test/llm_verifier_test.dart`: Kiểm tra chu trình lọc Generator -> Verifier -> Code Gatekeeper, đảm bảo quote matching loại bỏ triệt để hallucinated suggestions.
+Hệ thống được bảo vệ bởi bộ test tự động toàn diện:
+- `test/cross_check_engine_test.dart`: Kiểm tra đối chiếu số liệu 3 bên, phát hiện trùng lặp ID, xung đột trạng thái Pass/Fail, lệch tiến độ ngày tháng (không dùng regex công nghệ).
+- `test/llm_verifier_test.dart`: Kiểm tra chu trình 3-Pass (Generator $\rightarrow$ Verifier $\rightarrow$ Quote Gatekeeper), bảo đảm chặn đứng 100% fake quote.
 - `test/report_exporters_test.dart`: Kiểm tra tính toàn vẹn khi sinh file Excel và PDF, cấu trúc sheet và định dạng đầu ra.
 
-Tất cả các bài test đều vượt qua 100% với thời gian thực thi tối ưu.
+Toàn bộ 89/89 tests đều vượt qua với kết quả 100% green suite.
