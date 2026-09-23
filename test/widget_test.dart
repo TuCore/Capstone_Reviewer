@@ -1,48 +1,49 @@
 import 'package:capstone_reviewer/core/services/ai_service.dart';
+import 'package:capstone_reviewer/core/services/settings_service.dart';
 import 'package:capstone_reviewer/features/upload/presentation/upload_controller.dart';
 import 'package:capstone_reviewer/core/extraction/test_case_schema.dart';
 import 'package:capstone_reviewer/core/services/coverage_stats.dart';
 import 'package:capstone_reviewer/core/services/test_case_review_engine.dart';
 import 'package:capstone_reviewer/features/review/presentation/review_screen.dart';
 import 'package:capstone_reviewer/features/review/review_bundle.dart';
-import 'package:capstone_reviewer/features/upload/presentation/upload_screen.dart';
+import 'package:capstone_reviewer/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('UploadScreen shows three slots in order and locked analyze', (tester) async {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('DashboardScreen shows three slots in order and locked analyze', (tester) async {
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final prefs = await SharedPreferences.getInstance();
 
     await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(home: UploadScreen()),
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
+        child: const MaterialApp(home: DashboardScreen()),
       ),
     );
 
-    final regFinder = find.text('Phiếu Đăng Ký Đề Tài');
-    final srsFinder = find.text('File SRS (Đặc tả dự án)');
-    final excelFinder = find.text('File Test Report (Excel)');
+    final regFinder = find.text('Phiếu Đăng Ký');
+    final srsFinder = find.text('SRS');
+    final excelFinder = find.text('Test Cases');
 
     expect(regFinder, findsOneWidget);
     expect(srsFinder, findsOneWidget);
     expect(excelFinder, findsOneWidget);
-    expect(find.text('BẮT ĐẦU PHÂN TÍCH (REVIEW)'), findsOneWidget);
-    expect(find.textContaining('Chưa sẵn sàng: thiếu'), findsOneWidget);
-    expect(find.text('HỦY'), findsNothing);
+    expect(find.text('PHÂN TÍCH'), findsOneWidget);
 
-    // Card order: Registration (leftmost) -> SRS (middle) -> Excel (rightmost)
-    final regX = tester.getTopLeft(regFinder).dx;
-    final srsX = tester.getTopLeft(srsFinder).dx;
-    final excelX = tester.getTopLeft(excelFinder).dx;
-    expect(regX < srsX, isTrue);
-    expect(srsX < excelX, isTrue);
-
-    final button = tester.widget<ElevatedButton>(
-      find.widgetWithText(ElevatedButton, 'BẮT ĐẦU PHÂN TÍCH (REVIEW)'),
+    final button = tester.widget<FilledButton>(
+      find.widgetWithIcon(FilledButton, Icons.analytics),
     );
     expect(button.onPressed, isNull);
   });
@@ -52,20 +53,29 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final prefs = await SharedPreferences.getInstance();
 
     await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(home: UploadScreen()),
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
+        child: const MaterialApp(home: DashboardScreen()),
       ),
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('File Test Report (Excel)'), findsOneWidget);
+    expect(find.text('Test Cases'), findsOneWidget);
   });
 
 
-  test('registration is mandatory for canAnalyze; wrong vendor key errors immediately', () {
-    final container = ProviderContainer();
+  test('registration is mandatory for canAnalyze; wrong vendor key errors immediately', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+    );
     addTearDown(container.dispose);
     final notifier = container.read(uploadControllerProvider.notifier);
 

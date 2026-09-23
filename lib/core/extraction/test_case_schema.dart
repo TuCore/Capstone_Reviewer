@@ -43,6 +43,19 @@ class TestCaseRecord {
   final String canonicalId;
   final String canonicalDescription;
   final int? sourceRow;
+  Map<String, dynamic> toJson() => {
+        'sheet': sheet,
+        if (sourceRow != null) 'row': sourceRow,
+        'id': id,
+        'description': description,
+        if (preCondition.isNotEmpty) 'preCondition': preCondition,
+        if (steps.isNotEmpty) 'steps': steps,
+        if (testData.isNotEmpty) 'testData': testData,
+        if (expected.isNotEmpty) 'expected': expected,
+        if (status.isNotEmpty) 'status': status,
+        if (note.isNotEmpty) 'note': note,
+      };
+
   Map<String, String> toGolden() => {
         'sheet': sheet,
         'id': canonicalId.isEmpty ? normalizeCode(id) : canonicalId,

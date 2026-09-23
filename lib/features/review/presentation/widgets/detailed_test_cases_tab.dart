@@ -41,8 +41,7 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
     final allReviews = widget.caseReviews;
 
     // Filter modules
-    final modules = allReviews.map((r) => r.record.sheet).toSet().toList()
-      ..sort();
+    final modules = allReviews.map((r) => r.record.sheet).toSet().toList()..sort();
 
     // Filter statuses
     final statuses = allReviews
@@ -58,48 +57,28 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
         .toSet()
         .toList()
       ..sort();
+
     // Counts for stat bar
     final totalCount = allReviews.length;
     final issuesCount = allReviews.where((r) => r.hasIssues).length;
     final cleanCount = totalCount - issuesCount;
-    final criticalCount = allReviews
-        .where((r) => r.highestSeverity == TestCaseIssueSeverity.critical)
-        .length;
-    final highCount = allReviews
-        .where((r) => r.highestSeverity == TestCaseIssueSeverity.high)
-        .length;
 
     // Apply filtering
     var filtered = allReviews.where((rev) {
       final rec = rev.record;
       if (_onlyWithIssues && !rev.hasIssues) return false;
-
-      if (_selectedModule != null && rec.sheet != _selectedModule) {
-        return false;
-      }
-
-      if (_selectedSeverity != null && rev.highestSeverity != _selectedSeverity) {
-        return false;
-      }
-
-      if (_selectedStatus != null && rec.status.trim() != _selectedStatus) {
-        return false;
-      }
-
-      if (_selectedIssueCode != null &&
-          !rev.issues.any((i) => i.code == _selectedIssueCode)) {
-        return false;
-      }
+      if (_selectedModule != null && rec.sheet != _selectedModule) return false;
+      if (_selectedSeverity != null && rev.highestSeverity != _selectedSeverity) return false;
+      if (_selectedStatus != null && rec.status.trim() != _selectedStatus) return false;
+      if (_selectedIssueCode != null && !rev.issues.any((i) => i.code == _selectedIssueCode)) return false;
 
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
-        final matchId = rec.id.toLowerCase().contains(query) ||
-            rec.canonicalId.toLowerCase().contains(query);
+        final matchId = rec.id.toLowerCase().contains(query) || rec.canonicalId.toLowerCase().contains(query);
         final matchDesc = rec.description.toLowerCase().contains(query);
         final matchModule = rec.sheet.toLowerCase().contains(query);
         if (!matchId && !matchDesc && !matchModule) return false;
       }
-
       return true;
     }).toList();
 
@@ -127,254 +106,163 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
 
     return Column(
       children: [
-        // Summary stats bar
+        // Compact Filters Bar
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          color: Colors.grey.shade50,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _StatChip(
-                  label: 'Tổng số test cases',
-                  value: '$totalCount',
-                  color: Colors.blueGrey,
-                ),
-                const SizedBox(width: 12),
-                _StatChip(
-                  label: 'Cần sửa đổi / xem lại',
-                  value: '$issuesCount',
-                  color: issuesCount > 0 ? Colors.red.shade700 : Colors.green,
-                ),
-                const SizedBox(width: 12),
-                _StatChip(
-                  label: 'Không phát hiện lỗi',
-                  value: '$cleanCount',
-                  color: Colors.green.shade700,
-                ),
-                if (criticalCount > 0) ...[
-                  const SizedBox(width: 12),
-                  _StatChip(
-                    label: 'Lỗi nghiêm trọng',
-                    value: '$criticalCount',
-                    color: Colors.red.shade800,
-                  ),
-                ],
-                if (highCount > 0) ...[
-                  const SizedBox(width: 12),
-                  _StatChip(
-                    label: 'Mức cao (High)',
-                    value: '$highCount',
-                    color: Colors.orange.shade800,
-                  ),
-                ],
-                const SizedBox(width: 24),
-                Text(
-                  'Hiển thị: ${filtered.length}/$totalCount ca',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
           ),
-        ),
-
-        // Controls / Filters row
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              TextField(
-                decoration: InputDecoration(
-                  hintText: 'Tìm kiếm ID, mô tả, module...',
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  isDense: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+              // Search
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 36,
+                  child: TextField(
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Tìm kiếm ID, mô tả...',
+                      prefixIcon: const Icon(Icons.search, size: 16),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      isDense: true,
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 14),
+                              onPressed: () => setState(() => _searchQuery = ''),
+                              padding: EdgeInsets.zero,
+                            )
+                          : null,
+                    ),
+                    onChanged: (val) => setState(() => _searchQuery = val.trim()),
                   ),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () => setState(() => _searchQuery = ''),
-                        )
-                      : null,
                 ),
-                onChanged: (val) => setState(() => _searchQuery = val.trim()),
               ),
-              const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
+              const SizedBox(width: 12),
 
-              // Module filter
-              DropdownButton<String?>(
+              // Module Filter
+              _CompactDropdown<String?>(
                 value: _selectedModule,
-                hint: const Text('Tất cả Sheet / Module'),
-                underline: const SizedBox(),
+                hint: 'Module',
                 items: [
-                  const DropdownMenuItem(
-                    value: null,
-                    child: Text('Tất cả Sheet / Module'),
-                  ),
-                  ...modules.map((m) => DropdownMenuItem(
-                        value: m,
-                        child: Text('Sheet: $m'),
-                      )),
+                  const DropdownMenuItem(value: null, child: Text('Tất cả Module')),
+                  ...modules.map((m) => DropdownMenuItem(value: m, child: Text(m))),
                 ],
                 onChanged: (val) => setState(() => _selectedModule = val),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
 
-              // Severity filter
-              DropdownButton<TestCaseIssueSeverity?>(
+              // Severity Filter
+              _CompactDropdown<TestCaseIssueSeverity?>(
                 value: _selectedSeverity,
-                hint: const Text('Mọi mức độ lỗi'),
-                underline: const SizedBox(),
+                hint: 'Mức lỗi',
                 items: const [
-                  DropdownMenuItem(
-                    value: null,
-                    child: Text('Mọi mức độ lỗi'),
-                  ),
-                  DropdownMenuItem(
-                    value: TestCaseIssueSeverity.critical,
-                    child: Text('🔴 Lỗi nghiêm trọng (Critical)'),
-                  ),
-                  DropdownMenuItem(
-                    value: TestCaseIssueSeverity.high,
-                    child: Text('🟠 Mức cao (High)'),
-                  ),
-                  DropdownMenuItem(
-                    value: TestCaseIssueSeverity.medium,
-                    child: Text('🟡 Mức trung bình (Medium)'),
-                  ),
-                  DropdownMenuItem(
-                    value: TestCaseIssueSeverity.low,
-                    child: Text('🔵 Mức thấp (Low)'),
-                  ),
-                  DropdownMenuItem(
-                    value: TestCaseIssueSeverity.info,
-                    child: Text('⚪ Thông tin (Info)'),
-                  ),
+                  DropdownMenuItem(value: null, child: Text('Tất cả mức lỗi')),
+                  DropdownMenuItem(value: TestCaseIssueSeverity.critical, child: Text('Critical')),
+                  DropdownMenuItem(value: TestCaseIssueSeverity.high, child: Text('High')),
+                  DropdownMenuItem(value: TestCaseIssueSeverity.medium, child: Text('Medium')),
+                  DropdownMenuItem(value: TestCaseIssueSeverity.low, child: Text('Low')),
+                  DropdownMenuItem(value: TestCaseIssueSeverity.info, child: Text('Info')),
                 ],
                 onChanged: (val) => setState(() => _selectedSeverity = val),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
 
-              // Status filter
+              // Status Filter
               if (statuses.isNotEmpty) ...[
-                DropdownButton<String?>(
+                _CompactDropdown<String?>(
                   value: _selectedStatus,
-                  hint: const Text('Trạng thái test'),
-                  underline: const SizedBox(),
+                  hint: 'Trạng thái',
                   items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('Tất cả trạng thái'),
-                    ),
-                    ...statuses.map((st) => DropdownMenuItem(
-                          value: st,
-                          child: Text('Status: $st'),
-                        )),
+                    const DropdownMenuItem(value: null, child: Text('Tất cả trạng thái')),
+                    ...statuses.map((st) => DropdownMenuItem(value: st, child: Text(st))),
                   ],
                   onChanged: (val) => setState(() => _selectedStatus = val),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
               ],
 
-              // Issue code filter
+              // Issue Code Filter
               if (issueCodes.isNotEmpty) ...[
-                DropdownButton<String?>(
+                _CompactDropdown<String?>(
                   value: _selectedIssueCode,
-                  hint: const Text('Mã lỗi (Issue Code)'),
-                  underline: const SizedBox(),
+                  hint: 'Mã lỗi',
                   items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('Tất cả mã lỗi'),
-                    ),
-                    ...issueCodes.map((c) => DropdownMenuItem(
-                          value: c,
-                          child: Text('Mã: $c'),
-                        )),
+                    const DropdownMenuItem(value: null, child: Text('Tất cả mã lỗi')),
+                    ...issueCodes.map((c) => DropdownMenuItem(value: c, child: Text(c))),
                   ],
                   onChanged: (val) => setState(() => _selectedIssueCode = val),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
               ],
-              // Filter only with issues toggle
+
+              // Only issues
               FilterChip(
-                label: const Text('Chỉ ca có lỗi'),
+                label: const Text('Có lỗi', style: TextStyle(fontSize: 12)),
                 selected: _onlyWithIssues,
                 onSelected: (val) => setState(() => _onlyWithIssues = val),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
               ),
-              const SizedBox(width: 12),
 
-              // Sort dropdown
-              DropdownButton<String>(
+              const Spacer(),
+
+              // Sort
+              _CompactDropdown<String>(
                 value: _sortBy,
-                underline: const SizedBox(),
+                hint: 'Sắp xếp',
+                icon: Icons.sort,
                 items: const [
-                  DropdownMenuItem(
-                    value: 'severity',
-                    child: Text('Sắp xếp: Mức lỗi giảm dần'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'id',
-                    child: Text('Sắp xếp: Theo ID'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'module',
-                    child: Text('Sắp xếp: Theo Sheet'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'status',
-                    child: Text('Sắp xếp: Theo Trạng thái'),
-                  ),
+                  DropdownMenuItem(value: 'severity', child: Text('Lỗi (Giảm dần)')),
+                  DropdownMenuItem(value: 'id', child: Text('Theo ID')),
+                  DropdownMenuItem(value: 'module', child: Text('Theo Module')),
+                  DropdownMenuItem(value: 'status', child: Text('Theo Trạng thái')),
                 ],
                 onChanged: (val) {
                   if (val != null) setState(() => _sortBy = val);
                 },
               ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
 
-        const Divider(height: 1),
+        // Quick Stats row
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          color: Colors.grey.shade50,
+          child: Row(
+            children: [
+              Text('Đang xem: ${filtered.length}/$totalCount', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+              const SizedBox(width: 16),
+              Text('Có lỗi: $issuesCount', style: TextStyle(fontSize: 12, color: issuesCount > 0 ? Colors.red.shade700 : Colors.green)),
+              const SizedBox(width: 16),
+              Text('Không lỗi: $cleanCount', style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
+            ],
+          ),
+        ),
 
-        // List of test cases (lazy ListView)
+        // List of test cases
         Expanded(
           child: filtered.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.search_off,
-                          size: 48, color: Colors.grey.shade400),
+                      Icon(Icons.search_off, size: 48, color: Colors.grey.shade400),
                       const SizedBox(height: 12),
                       Text(
                         'Không tìm thấy test case nào phù hợp với bộ lọc.',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 15,
-                        ),
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                       ),
                     ],
                   ),
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: filtered.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
                     final rev = filtered[index];
                     final rec = rev.record;
@@ -383,19 +271,16 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
 
                     return Card(
                       elevation: 0,
+                      margin: EdgeInsets.zero,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(8),
                         side: BorderSide(
-                          color: rev.hasIssues
-                              ? color.withValues(alpha: 0.3)
-                              : Colors.grey.shade200,
+                          color: rev.hasIssues ? color.withValues(alpha: 0.3) : Colors.grey.shade200,
                         ),
                       ),
-                      color: rev.hasIssues
-                          ? color.withValues(alpha: 0.02)
-                          : Colors.white,
+                      color: rev.hasIssues ? color.withValues(alpha: 0.02) : Colors.white,
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(8),
                         onTap: () {
                           showDialog(
                             context: context,
@@ -403,45 +288,36 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
                           );
                         },
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           child: Row(
                             children: [
                               // Sheet badge
                               Container(
-                                width: 72,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 3),
+                                width: 64,
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   rec.sheet,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade800,
-                                  ),
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
                                   textAlign: TextAlign.center,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 8),
 
                               // Test Case ID
                               SizedBox(
-                                width: 110,
+                                width: 90,
                                 child: Text(
                                   rec.id.isNotEmpty ? rec.id : rec.canonicalId,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 8),
 
                               // Description
                               Expanded(
@@ -449,32 +325,21 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      rec.description.isNotEmpty
-                                          ? rec.description
-                                          : '(Không có mô tả)',
+                                      rec.description.isNotEmpty ? rec.description : '(Không có mô tả)',
                                       style: TextStyle(
-                                        fontSize: 13,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.w500,
-                                        color: rec.description.isNotEmpty
-                                            ? Colors.black87
-                                            : Colors.red.shade700,
-                                        fontStyle: rec.description.isNotEmpty
-                                            ? FontStyle.normal
-                                            : FontStyle.italic,
+                                        color: rec.description.isNotEmpty ? Colors.black87 : Colors.red.shade700,
+                                        fontStyle: rec.description.isNotEmpty ? FontStyle.normal : FontStyle.italic,
                                       ),
-                                      maxLines: 2,
+                                      maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     if (rev.issues.isNotEmpty) ...[
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 2),
                                       Text(
-                                        rev.issues
-                                            .map((e) => '[${e.code}] ${e.message}')
-                                            .join(' • '),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: color,
-                                        ),
+                                        rev.issues.map((e) => '[${e.code}] ${e.message}').join(' • '),
+                                        style: TextStyle(fontSize: 11, color: color),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -482,76 +347,48 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 8),
 
                               // Status badge
                               if (rec.status.isNotEmpty) ...[
                                 Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: _statusColor(rec.status)
-                                        .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
+                                    color: _statusColor(rec.status).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
                                     rec.status,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: _statusColor(rec.status),
-                                    ),
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _statusColor(rec.status)),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 8),
                               ],
 
                               // Verdict badge
                               Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: color.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: color.withValues(alpha: 0.3),
-                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: color.withValues(alpha: 0.3)),
                                 ),
                                 child: Text(
                                   rev.verdictLabel,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: color,
-                                  ),
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 6),
 
-                              // Issue count chip
+                              // Issue count
                               if (rev.issues.isNotEmpty)
                                 CircleAvatar(
-                                  radius: 11,
+                                  radius: 9,
                                   backgroundColor: color,
-                                  child: Text(
-                                    '${rev.issues.length}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                  child: Text('${rev.issues.length}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                 )
                               else
-                                const Icon(
-                                  Icons.check_circle_outline,
-                                  color: Color(0xFF16A34A),
-                                  size: 18,
-                                ),
-
-                              const SizedBox(width: 8),
-                              const Icon(Icons.chevron_right,
-                                  size: 18, color: Colors.grey),
+                                const Icon(Icons.check_circle_outline, color: Color(0xFF16A34A), size: 16),
                             ],
                           ),
                         ),
@@ -572,46 +409,41 @@ class _DetailedTestCasesTabState extends State<DetailedTestCasesTab> {
   }
 }
 
-class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
+class _CompactDropdown<T> extends StatelessWidget {
+  final T value;
+  final String hint;
+  final IconData? icon;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
 
-  const _StatChip({
-    required this.label,
+  const _CompactDropdown({
     required this.value,
-    required this.color,
+    required this.hint,
+    this.icon,
+    required this.items,
+    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(6),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade700,
-            ),
-          ),
-        ],
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isDense: true,
+          isExpanded: false,
+          icon: icon != null ? Icon(icon, size: 16, color: Colors.grey.shade600) : const Icon(Icons.arrow_drop_down, size: 16),
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
+          hint: Text(hint, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+          items: items,
+          onChanged: onChanged,
+        ),
       ),
     );
   }

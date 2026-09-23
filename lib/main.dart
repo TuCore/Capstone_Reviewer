@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'features/upload/presentation/upload_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'core/services/settings_service.dart';
+import 'features/dashboard/presentation/dashboard_screen.dart';
 
-void main() {
-  runApp(const ProviderScope(child: CapstoneReviewerApp()));
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+
+  runApp(ProviderScope(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+    ],
+    child: const CapstoneReviewerApp(),
+  ));
 }
 
 class CapstoneReviewerApp extends StatelessWidget {
@@ -21,7 +31,7 @@ class CapstoneReviewerApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const UploadScreen(),
+      home: const DashboardScreen(),
     );
   }
 }

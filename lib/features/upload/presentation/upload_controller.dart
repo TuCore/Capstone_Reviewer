@@ -1,10 +1,11 @@
+import 'dart:convert';
+import 'package:capstone_reviewer/core/services/context_extractor.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-
-
 import '../../../core/extraction/file_gate.dart';
+import '../../../core/services/settings_service.dart';
 import '../../../core/services/ai_service.dart';
 import '../../../core/services/api_key_format.dart';
 import '../../../core/services/coverage_stats.dart';
@@ -23,6 +24,7 @@ class UploadState {
     this.srsPath,
     this.registrationPath,
     this.apiKey = '',
+    this.modelName = 'gemini-2.5-flash',
     this.provider = AIProvider.gemini,
     this.isAnalyzing = false,
     this.error,
@@ -31,12 +33,14 @@ class UploadState {
     this.unknownModules = const [],
     this.truncated = false,
     this.runId = 0,
+    this.reviewBundle,
   });
 
   final String? excelPath;
   final String? srsPath;
   final String? registrationPath;
   final String apiKey;
+  final String modelName;
   final AIProvider provider;
   final bool isAnalyzing;
   final String? error;
@@ -45,6 +49,7 @@ class UploadState {
   final List<String> unknownModules;
   final bool truncated;
   final int runId;
+  final ReviewBundle? reviewBundle;
 
   bool get canAnalyze =>
       registrationPath != null &&
@@ -71,6 +76,7 @@ class UploadState {
     String? srsPath,
     String? registrationPath,
     String? apiKey,
+    String? modelName,
     AIProvider? provider,
     bool? isAnalyzing,
     String? error,
@@ -79,12 +85,14 @@ class UploadState {
     List<String>? unknownModules,
     bool? truncated,
     int? runId,
+    ReviewBundle? reviewBundle,
   }) {
     return UploadState(
       excelPath: excelPath ?? this.excelPath,
       srsPath: srsPath ?? this.srsPath,
       registrationPath: registrationPath ?? this.registrationPath,
       apiKey: apiKey ?? this.apiKey,
+      modelName: modelName ?? this.modelName,
       provider: provider ?? this.provider,
       isAnalyzing: isAnalyzing ?? this.isAnalyzing,
       error: error ?? this.error,
@@ -93,6 +101,7 @@ class UploadState {
       unknownModules: unknownModules ?? this.unknownModules,
       truncated: truncated ?? this.truncated,
       runId: runId ?? this.runId,
+      reviewBundle: reviewBundle ?? this.reviewBundle,
     );
   }
 
@@ -102,6 +111,7 @@ class UploadState {
       srsPath: srsPath,
       registrationPath: registrationPath,
       apiKey: apiKey,
+      modelName: modelName,
       provider: provider,
       isAnalyzing: isAnalyzing,
       error: null,
@@ -110,6 +120,7 @@ class UploadState {
       unknownModules: unknownModules,
       truncated: truncated,
       runId: runId,
+      reviewBundle: reviewBundle,
     );
   }
 }
@@ -123,50 +134,80 @@ class UploadController extends Notifier<UploadState> {
   http.Client get _client => _http ??= http.Client();
 
   @override
-  UploadState build() => UploadState();
+  UploadState build() {
+    final settings = ref.watch(settingsServiceProvider);
+    return UploadState(
+      provider: settings.getProvider(),
+      apiKey: settings.getApiKey(),
+      modelName: settings.getModelName(),
+    );
+  }
 
+  void refreshSettings() {
+    final settings = ref.read(settingsServiceProvider);
+    state = state.copyWith(
+      provider: settings.getProvider(),
+      apiKey: settings.getApiKey(),
+      modelName: settings.getModelName(),
+      error: null, // Clear error when settings change
+    );
+  }
 
   bool _isStale(int runId) => runId != _generation;
 
+  bool _isPicking = false;
+
   Future<void> pickExcelFile() async {
-    if (state.isAnalyzing) return;
+    if (state.isAnalyzing || _isPicking) return;
+    _isPicking = true;
     try {
       final result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['xlsx', 'xls'],
+        windowsOptions: const WindowsOptions(lockParentWindow: true),
       );
       if (result == null || result.path == null) return;
       await _acceptExcel(result.path!);
     } catch (e) {
       state = _base().copyWith(error: 'Lỗi khi chọn file Excel: $e');
+    } finally {
+      _isPicking = false;
     }
   }
 
   Future<void> pickSrsFile() async {
-    if (state.isAnalyzing) return;
+    if (state.isAnalyzing || _isPicking) return;
+    _isPicking = true;
     try {
       final result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'docx', 'doc'],
+        windowsOptions: const WindowsOptions(lockParentWindow: true),
       );
       if (result == null || result.path == null) return;
       await _acceptDoc(result.path!, srs: true);
     } catch (e) {
       state = _base().copyWith(error: 'Lỗi khi chọn file SRS: $e');
+    } finally {
+      _isPicking = false;
     }
   }
 
   Future<void> pickRegistrationFile() async {
-    if (state.isAnalyzing) return;
+    if (state.isAnalyzing || _isPicking) return;
+    _isPicking = true;
     try {
       final result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'docx', 'doc'],
+        windowsOptions: const WindowsOptions(lockParentWindow: true),
       );
       if (result == null || result.path == null) return;
       await _acceptDoc(result.path!, srs: false);
     } catch (e) {
       state = _base().copyWith(error: 'Lỗi khi chọn phiếu đăng ký: $e');
+    } finally {
+      _isPicking = false;
     }
   }
 
@@ -194,6 +235,7 @@ class UploadController extends Notifier<UploadState> {
       registrationPath: state.registrationPath,
       apiKey: state.apiKey,
       provider: state.provider,
+      modelName: state.modelName,
       statusMessage: status,
     );
   }
@@ -210,6 +252,7 @@ class UploadController extends Notifier<UploadState> {
       registrationPath: srs ? state.registrationPath : path,
       apiKey: state.apiKey,
       provider: state.provider,
+      modelName: state.modelName,
       statusMessage: inspection.statusMessage,
     );
   }
@@ -221,6 +264,7 @@ class UploadController extends Notifier<UploadState> {
       srsPath: state.srsPath,
       registrationPath: state.registrationPath,
       apiKey: trimmed,
+      modelName: state.modelName,
       provider: state.provider,
       error: ApiKeyFormat.errorFor(state.provider, trimmed),
       statusMessage: state.statusMessage,
@@ -229,15 +273,17 @@ class UploadController extends Notifier<UploadState> {
       truncated: state.truncated,
       isAnalyzing: state.isAnalyzing,
       runId: state.runId,
+      reviewBundle: state.reviewBundle,
     );
   }
 
-  void setProvider(AIProvider provider) {
+  void setProvider(AIProvider provider, {String? modelName}) {
     state = UploadState(
       excelPath: state.excelPath,
       srsPath: state.srsPath,
       registrationPath: state.registrationPath,
       apiKey: state.apiKey,
+      modelName: modelName ?? state.modelName,
       provider: provider,
       error: ApiKeyFormat.errorFor(provider, state.apiKey),
       statusMessage: state.statusMessage,
@@ -246,16 +292,21 @@ class UploadController extends Notifier<UploadState> {
       truncated: state.truncated,
       isAnalyzing: state.isAnalyzing,
       runId: state.runId,
+      reviewBundle: state.reviewBundle,
     );
   }
 
   void clearExcel() {
     if (state.isAnalyzing) return;
     state = UploadState(
+      excelPath: null,
       srsPath: state.srsPath,
       registrationPath: state.registrationPath,
       apiKey: state.apiKey,
       provider: state.provider,
+      modelName: state.modelName,
+      reviewBundle: state.reviewBundle,
+      runId: state.runId,
     );
   }
 
@@ -263,9 +314,13 @@ class UploadController extends Notifier<UploadState> {
     if (state.isAnalyzing) return;
     state = UploadState(
       excelPath: state.excelPath,
+      srsPath: null,
       registrationPath: state.registrationPath,
       apiKey: state.apiKey,
       provider: state.provider,
+      modelName: state.modelName,
+      reviewBundle: state.reviewBundle,
+      runId: state.runId,
     );
   }
 
@@ -274,8 +329,12 @@ class UploadController extends Notifier<UploadState> {
     state = UploadState(
       excelPath: state.excelPath,
       srsPath: state.srsPath,
+      registrationPath: null,
       apiKey: state.apiKey,
       provider: state.provider,
+      modelName: state.modelName,
+      reviewBundle: state.reviewBundle,
+      runId: state.runId,
     );
   }
 
@@ -287,11 +346,13 @@ class UploadController extends Notifier<UploadState> {
       excelPath: state.excelPath,
       srsPath: state.srsPath,
       registrationPath: state.registrationPath,
-      apiKey: '',
+      apiKey: state.apiKey,
       provider: state.provider,
+      modelName: state.modelName,
       isAnalyzing: false,
       statusMessage: 'Đã hủy.',
       runId: _generation,
+      reviewBundle: state.reviewBundle,
     );
   }
 
@@ -302,7 +363,9 @@ class UploadController extends Notifier<UploadState> {
       registrationPath: state.registrationPath,
       apiKey: state.apiKey,
       provider: state.provider,
+      modelName: state.modelName,
       runId: state.runId,
+      reviewBundle: state.reviewBundle,
     );
   }
 
@@ -353,6 +416,7 @@ class UploadController extends Notifier<UploadState> {
       registrationPath: state.registrationPath,
       apiKey: state.apiKey,
       provider: state.provider,
+      modelName: state.modelName,
       isAnalyzing: true,
       statusMessage:
           chunked ? 'Đang đọc file lớn...' : 'Đang trích tài liệu...',
@@ -405,6 +469,7 @@ class UploadController extends Notifier<UploadState> {
         registrationPath: state.registrationPath,
         apiKey: state.apiKey,
         provider: state.provider,
+        modelName: state.modelName,
         isAnalyzing: true,
         skippedSheets: excelResult.skippedSheets,
         unknownModules: unknown,
@@ -415,22 +480,24 @@ class UploadController extends Notifier<UploadState> {
       final aiService = AIService(
         apiKey: state.apiKey,
         provider: state.provider,
+        modelName: state.modelName,
         client: _client,
       );
-      var review = await aiService.reviewTestCases(
-        srsContent: docResult.text,
-        testCasesContent: excelResult.text,
-        registrationContext: registrationBlock,
-        hardChecks: checks.map((c) => '- ${c.code}: ${c.message}').join('\n'),
-        metrics: stats.toMarkdown(),
-      );
+
+      // --- PHASE 0: CONTEXT EXTRACTION ---
+      final contextExtractor = ContextExtractor(aiService);
+      final srsBible = await contextExtractor.extractFromSrs(docResult.text);
       if (_isStale(runId)) return null;
+
+      final testCasesJsonString = jsonEncode(excelResult.records.map((r) => r.toJson()).toList());
+
+      // --- PHASE 1: GENERATOR & REVIEWER ---
 
       LlmVerifierResult verifierResult = const LlmVerifierResult();
       try {
         verifierResult = await aiService.runLlmVerifierPipeline(
-          srsContent: docResult.text,
-          testCasesContent: excelResult.text,
+          srsBible: srsBible,
+          testCasesJson: testCasesJsonString,
           registrationContext: registrationBlock,
           rawSources: [
             docResult.text,
@@ -445,16 +512,23 @@ class UploadController extends Notifier<UploadState> {
 
       final verifiedFindings = verifierResult.verifiedFindings;
       final projectInfo = verifierResult.projectInfo;
-      final effectiveStats = projectInfo.features.isNotEmpty
+      
+      // Recompute stats using AI extracted features if available
+      final aiFeatures = srsBible.features
+          .map((f) => f['name'] ?? '')
+          .where((n) => n.isNotEmpty)
+          .toList();
+          
+      final effectiveStats = aiFeatures.isNotEmpty 
           ? computeCoverage(
               srsText: docResult.text,
               records: excelResult.records,
               unknownModules: unknown,
-              featureList: projectInfo.features,
+              featureList: aiFeatures,
             )
           : stats;
 
-      final guarded = stripHallucinatedQuotes(review, [
+      final guarded = stripHallucinatedQuotes(verifierResult.generalReview, [
         docResult.text,
         excelResult.text,
         registrationBlock,
@@ -503,12 +577,14 @@ class UploadController extends Notifier<UploadState> {
         excelPath: state.excelPath,
         srsPath: state.srsPath,
         registrationPath: state.registrationPath,
-        apiKey: '',
+        apiKey: state.apiKey,
         provider: state.provider,
+        modelName: state.modelName,
         skippedSheets: excelResult.skippedSheets,
         unknownModules: unknown,
         truncated: excelResult.truncated || docResult.truncated,
         runId: runId,
+        reviewBundle: bundle,
       );
       return bundle;
     } catch (e) {
@@ -517,9 +593,12 @@ class UploadController extends Notifier<UploadState> {
         excelPath: state.excelPath,
         srsPath: state.srsPath,
         registrationPath: state.registrationPath,
-        apiKey: '',
+        apiKey: state.apiKey,
         provider: state.provider,
+        modelName: state.modelName,
         runId: runId,
+        reviewBundle: state.reviewBundle,
+        error: 'Lỗi khi phân tích: $e',
       );
       return null;
     }

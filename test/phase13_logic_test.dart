@@ -146,9 +146,7 @@ b. Objectives: Build a cloud-based CDE repository.
     expect(classifyGapTaxonomy('required email empty'), 'Required field');
   });
 
-  test('Gemini pinned to 2.5 flash', () {
-    expect(geminiModel, 'gemini-2.5-flash');
-  });
+
 
   test('computeCoverage handles feature list from AI without regex guessing', () {
     const aiFeatures = [

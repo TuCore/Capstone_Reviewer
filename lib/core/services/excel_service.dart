@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:excel/excel.dart';
 import 'package:flutter/foundation.dart';
 
 import '../extraction/extraction_result.dart';
@@ -9,6 +6,8 @@ import '../extraction/sheet_classifier.dart';
 import '../extraction/test_case_schema.dart';
 import '../extraction/workbook_snapshot.dart';
 import 'cross_check_models.dart';
+import 'xlsx_reader.dart';
+
 class ExcelService {
   Future<ExtractionResult> extractTestCases(String filePath) async {
     final inspection = FileGate.inspect(filePath);
@@ -46,9 +45,10 @@ ExtractionResult extractExcelSync(String filePath) {
   }
 
   try {
-    final bytes = File(filePath).readAsBytesSync();
-    final excel = Excel.decodeBytes(bytes);
-    return _fromWorkbook(excel, sizeBytes: inspection.sizeBytes);
+    // Use custom XlsxReader instead of `excel` package to avoid numFmtId bug
+    final reader = XlsxReader.readFile(filePath);
+    final workbook = _snapshotFromXlsxReader(reader);
+    return extractExcelFromWorkbook(workbook, sizeBytes: inspection.sizeBytes);
   } on FileRejectedException {
     rethrow;
   } catch (e) {
@@ -131,23 +131,24 @@ ExtractionResult extractExcelFromWorkbook(
   );
 }
 
-ExtractionResult _fromWorkbook(Excel excel, {required int sizeBytes}) {
-  final workbook = _snapshotFromExcel(excel);
-  return extractExcelFromWorkbook(workbook, sizeBytes: sizeBytes);
-}
-
-WorkbookSnapshot _snapshotFromExcel(Excel excel) {
+WorkbookSnapshot _snapshotFromXlsxReader(XlsxReader reader) {
   final sheets = <WorkbookSheet>[];
-  for (final name in excel.tables.keys) {
-    final sheet = excel.tables[name];
-    if (sheet == null) continue;
+  for (final name in reader.sheetNames) {
+    final textRows = reader.rows(name);
     final rows = <WorkbookRow>[];
     var emptyStreak = 0;
-    for (var r = 0; r < sheet.maxRows; r++) {
-      final excelRow = sheet.row(r);
+    for (var r = 0; r < textRows.length; r++) {
+      final textRow = textRows[r];
       final cells = <WorkbookCell>[];
-      for (var c = 0; c < excelRow.length; c++) {
-        cells.add(WorkbookCell.fromExcelData(excelRow[c], rowIndex: r, columnIndex: c));
+      for (var c = 0; c < textRow.length; c++) {
+        cells.add(WorkbookCell(
+          rowIndex: r,
+          columnIndex: c,
+          address: '${String.fromCharCode(65 + (c % 26))}${r + 1}',
+          kind: CellValueKind.text,
+          text: textRow[c],
+          rawValue: textRow[c],
+        ));
       }
       final row = WorkbookRow(rowIndex: r, cells: cells);
       if (!row.hasContent) {
